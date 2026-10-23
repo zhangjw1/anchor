@@ -1,0 +1,6 @@
+{
+  "name": "Anchor - Base DEX Swap & Mempool Monitor",
+  "description": "Real-time on-chain swap monitor, wallet address tracker, balance reconciler and instant DEX aggregator on Base.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

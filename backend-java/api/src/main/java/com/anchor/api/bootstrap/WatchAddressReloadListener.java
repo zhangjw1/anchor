@@ -7,6 +7,9 @@ import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
+/**
+ * 进程就绪后把各链监控地址重新装入 Redis，避免重启后扫描漏地址。
+ */
 @Component
 public class WatchAddressReloadListener {
 
@@ -17,10 +20,12 @@ public class WatchAddressReloadListener {
     public WatchAddressReloadListener(WatchAddressService watchAddressService) {
         this.watchAddressService = watchAddressService;
     }
-
+    /**
+     * 启动完成后刷新全部链的监控地址集合。
+     */
     @EventListener(ApplicationReadyEvent.class)
     public void reloadWatchSets() {
         watchAddressService.reloadAll();
-        log.info("watch addresses reloaded");
+        log.info("监控地址已重新加载");
     }
 }

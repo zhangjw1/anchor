@@ -6,6 +6,9 @@ import com.baomidou.mybatisplus.annotation.TableName;
 
 import java.time.LocalDateTime;
 
+/**
+ * watched_address 表的一行。
+ */
 @TableName("watched_address")
 public class WatchAddressDO {
     @TableId(type = IdType.AUTO)

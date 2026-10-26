@@ -9,36 +9,51 @@ import com.anchor.common.dao.CheckpointMapper;
 import com.anchor.common.dao.SwapMapper;
 import com.anchor.common.dataobject.SwapDO;
 import com.anchor.common.domain.ConfirmStatusEnum;
+import com.anchor.common.dto.ChainEventDTO;
 import com.anchor.indexer.service.BlockIngestionService;
+import com.anchor.indexer.service.ConfirmationService;
+import com.anchor.indexer.dto.BlockIngestDTO;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * 同一事务内写区块哈希、交换和确认状态。
+ */
 @Service
 public class BlockIngestionServiceImpl implements BlockIngestionService {
 
     private final BlockHashMapper blockHashMapper;
     private final CheckpointMapper checkpointMapper;
     private final SwapMapper swapMapper;
+    private final ConfirmationService confirmationService;
 
-    public BlockIngestionServiceImpl(BlockHashMapper blockHashMapper, CheckpointMapper checkpointMapper, SwapMapper swapMapper) {
+    public BlockIngestionServiceImpl(BlockHashMapper blockHashMapper, CheckpointMapper checkpointMapper,
+                                     SwapMapper swapMapper, ConfirmationService confirmationService) {
         this.blockHashMapper = blockHashMapper;
         this.checkpointMapper = checkpointMapper;
         this.swapMapper = swapMapper;
+        this.confirmationService = confirmationService;
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void persist(ChainDefinition chain, ChainBlock block, List<SwapParser.ParsedSwap> swaps) {
+    public BlockIngestDTO persist(ChainDefinition chain, ChainBlock block, List<SwapParser.ParsedSwap> swaps, long finalizedBlock) {
         blockHashMapper.save(chain.chainId(), block.number(), block.hash(), block.parentHash(), AnchorConstants.ACTOR_INDEXER);
         long minKeep = block.number() - AnchorConstants.RECENT_HASH_LIMIT + 1;
         if (minKeep > 0) {
             blockHashMapper.deleteOlder(chain.chainId(), minKeep);
         }
         writeSwaps(swaps);
-        checkpointMapper.advance(chain.chainId(), block.number(), block.hash(), AnchorConstants.ACTOR_INDEXER);
+        List<ChainEventDTO> confirmations = confirmationService.apply(chain, block.number(), finalizedBlock);
+        return new BlockIngestDTO(swaps, confirmations);
+    }
+
+    @Override
+    public void advanceCheckpoint(long chainId, long blockNumber, String blockHash) {
+        checkpointMapper.advance(chainId, blockNumber, blockHash, AnchorConstants.ACTOR_INDEXER);
     }
 
     private void writeSwaps(List<SwapParser.ParsedSwap> swaps) {

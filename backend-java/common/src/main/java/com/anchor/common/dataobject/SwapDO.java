@@ -5,6 +5,9 @@ import com.baomidou.mybatisplus.annotation.TableField;
 
 import java.math.BigInteger;
 
+/**
+ * swap 表的一行。金额用整数保存最小单位。
+ */
 public class SwapDO {
     private Long chainId;
     private String txHash;

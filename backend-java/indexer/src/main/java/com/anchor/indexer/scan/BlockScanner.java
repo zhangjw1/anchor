@@ -13,7 +13,13 @@ import com.anchor.common.constant.AnchorConstants;
 import com.anchor.common.constant.RedisKeys;
 import com.anchor.common.dao.BlockHashMapper;
 import com.anchor.common.dao.CheckpointMapper;
+import com.anchor.common.dto.SwapEventDTO;
 import com.anchor.indexer.service.BlockIngestionService;
+import com.anchor.indexer.service.ChainEventPublishService;
+import com.anchor.indexer.dto.BlockIngestDTO;
+import com.anchor.indexer.dto.ReorgHandleDTO;
+import com.anchor.indexer.dto.ScanStepDTO;
+import com.anchor.indexer.service.ReorgService;
 import com.anchor.parser.service.TokenMetadataService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,6 +37,9 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+/**
+ * 按检查点顺序扫块。父哈希对不上时先尝试重组，无法定位就暂停。
+ */
 @Service
 public class BlockScanner implements ChainScanner {
 
@@ -45,12 +54,14 @@ public class BlockScanner implements ChainScanner {
     private final BlockHashMapper blockHashMapper;
     private final StringRedisTemplate redis;
     private final TokenMetadataService tokenMetadataService;
+    private final ReorgService reorgService;
+    private final ChainEventPublishService publisher;
     private final AtomicBoolean paused = new AtomicBoolean(false);
 
     public BlockScanner(AnchorSettings settings, ChainRegistry chainRegistry, RpcGateway rpcGateway, SwapParser swapParser,
-                        BlockIngestionService ingestionService, CheckpointMapper checkpointMapper,
-                        BlockHashMapper blockHashMapper, StringRedisTemplate redis,
-                        TokenMetadataService tokenMetadataService) {
+                        BlockIngestionService ingestionService, CheckpointMapper checkpointMapper, BlockHashMapper blockHashMapper,
+                        StringRedisTemplate redis, TokenMetadataService tokenMetadataService, ReorgService reorgService,
+                        ChainEventPublishService publisher) {
         this.settings = settings;
         this.chainRegistry = chainRegistry;
         this.rpcGateway = rpcGateway;
@@ -60,19 +71,23 @@ public class BlockScanner implements ChainScanner {
         this.blockHashMapper = blockHashMapper;
         this.redis = redis;
         this.tokenMetadataService = tokenMetadataService;
+        this.reorgService = reorgService;
+        this.publisher = publisher;
     }
-
+    /**
+     * 没有检查点时从当前链头开始，不回补历史块。
+     */
     @Override
     public void scanForever() {
         ChainDefinition chain = chainRegistry.requireByKey(settings.getChainKey());
         Long stored = checkpointMapper.getBlockNumber(chain.chainId());
         long next = stored == null ? -1L : stored + 1;
-        log.info("scanner loop chainId={} checkpoint={}", chain.chainId(), stored);
+        log.info("开始扫描，chainId={}，检查点={}", chain.chainId(), stored);
         while (!paused.get()) {
             try {
                 if (next < 0) {
                     next = rpcGateway.latestBlockNumber(chain.chainId());
-                    log.info("no checkpoint, start from head chainId={} blockNumber={}", chain.chainId(), next);
+                    log.info("没有检查点，从链头开始，chainId={}，区块={}", chain.chainId(), next);
                 }
                 long head = rpcGateway.latestBlockNumber(chain.chainId());
                 if (next > head) {
@@ -81,35 +96,50 @@ public class BlockScanner implements ChainScanner {
                 }
                 int count = (int) Math.min(AnchorConstants.CATCH_UP_CONCURRENCY, head - next + 1);
                 for (ChainBlock block : fetchRange(chain.chainId(), next, count)) {
-                    if (!process(chain, block)) {
+                    ScanStepDTO step = process(chain, block);
+                    if (step.kind() == ScanStepDTO.Kind.PAUSED) {
                         return;
                     }
-                    next = block.number() + 1;
+                    next = step.nextBlock();
+                    if (step.kind() == ScanStepDTO.Kind.REWOUND) {
+                        break;
+                    }
                 }
             } catch (RuntimeException ex) {
-                log.error("scan failed chainId={} blockNumber={}", chain.chainId(), next, ex);
+                log.error("扫描失败，chainId={}，区块={}", chain.chainId(), next, ex);
                 sleep(settings.getScanner().getPollIntervalMs());
             }
         }
     }
-
-    public boolean process(ChainDefinition chain, ChainBlock block) {
+    /**
+     * 解析本块中命中监控地址的交换，发布成功后才推进检查点。
+     */
+    public ScanStepDTO process(ChainDefinition chain, ChainBlock block) {
         MDC.put("chainId", String.valueOf(chain.chainId()));
         MDC.put("blockNumber", String.valueOf(block.number()));
         try {
             if (parentMismatch(chain.chainId(), block)) {
-                paused.set(true);
-                log.error("parent hash mismatch, scanner paused chainId={} blockNumber={} parentHash={}", chain.chainId(), block.number(), block.parentHash());
-                return false;
+                ReorgHandleDTO outcome = reorgService.handle(chain, block);
+                if (outcome.paused()) {
+                    paused.set(true);
+                    log.error("父哈希不一致，扫描已暂停，chainId={}，区块={}，父哈希={}", chain.chainId(), block.number(), block.parentHash());
+                    return ScanStepDTO.paused();
+                }
+                return ScanStepDTO.rewound(outcome.nextBlock());
             }
             List<SwapParser.ParsedSwap> swaps = parseMatched(chain, block);
             for (SwapParser.ParsedSwap swap : swaps) {
                 tokenMetadataService.ensure(chain, swap.tokenIn());
                 tokenMetadataService.ensure(chain, swap.tokenOut());
             }
-            ingestionService.persist(chain, block, swaps);
-            log.info("block ingested chainId={} blockNumber={} swaps={}", chain.chainId(), block.number(), swaps.size());
-            return true;
+            long finalized = rpcGateway.finalizedBlockNumber(chain.chainId());
+            BlockIngestDTO ingested = ingestionService.persist(chain, block, swaps, finalized);
+            // 发送成功后才推进 checkpoint，失败时外层按同一块重试
+            publisher.publishSwaps(ingested.swaps().stream().map(SwapEventDTO::from).toList());
+            publisher.publishChain(ingested.confirmations());
+            ingestionService.advanceCheckpoint(chain.chainId(), block.number(), block.hash());
+            log.info("区块已入库，chainId={}，区块={}，交换数={}", chain.chainId(), block.number(), swaps.size());
+            return ScanStepDTO.ingested(block.number() + 1);
         } finally {
             MDC.remove("chainId");
             MDC.remove("blockNumber");

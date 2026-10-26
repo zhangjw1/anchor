@@ -5,6 +5,9 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 import java.util.Map;
 
+/**
+ * 索引进程入口。默认打开扫描器，测试仍可用配置关掉。
+ */
 @SpringBootApplication(scanBasePackages = {"com.anchor.indexer", "com.anchor.parser.swap", "com.anchor.parser.service"})
 public class IndexerApplication {
 

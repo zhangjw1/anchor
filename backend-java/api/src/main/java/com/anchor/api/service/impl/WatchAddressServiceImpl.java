@@ -21,6 +21,9 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 
+/**
+ * 落库监控地址，并保证 Redis 集合与数据库一致。
+ */
 @Service
 public class WatchAddressServiceImpl implements WatchAddressService {
 

@@ -7,6 +7,9 @@ import org.springframework.stereotype.Service;
 
 import java.util.List;
 
+/**
+ * 从链注册表组装链列表。
+ */
 @Service
 public class ChainQueryServiceImpl implements ChainQueryService {
 

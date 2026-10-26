@@ -22,6 +22,9 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
+/**
+ * 先查内存和 Redis，没有再调用池子的 factory()。
+ */
 @Service
 public class RpcPoolFactoryLookup implements PoolFactoryLookup {
 
@@ -60,7 +63,7 @@ public class RpcPoolFactoryLookup implements PoolFactoryLookup {
             });
             return decoded;
         } catch (RuntimeException ex) {
-            log.warn("pool factory call failed chainId={} pool={}", chainId, pool);
+            log.warn("查询池子工厂失败，chainId={}，池子={}", chainId, pool);
             return Optional.empty();
         }
     }

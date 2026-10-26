@@ -44,6 +44,7 @@ class FailoverRpcGatewayTest {
         public String url() { return url; }
         public TokenBucket bucket() { return bucket; }
         public long latestBlockNumber() { if (fail) throw new IllegalStateException("down"); return block; }
+        public long finalizedBlockNumber() { if (fail) throw new IllegalStateException("down"); return block; }
         public ChainBlock getBlock(long blockNumber) { throw new UnsupportedOperationException(); }
         public List<ChainReceipt> getReceipts(List<String> txHashes) { throw new UnsupportedOperationException(); }
         public String ethCall(String to, String data) { throw new UnsupportedOperationException(); }

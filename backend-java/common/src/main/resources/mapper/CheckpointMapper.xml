@@ -15,4 +15,13 @@
             updated_at = NOW()
         WHERE block_checkpoint.block_number &lt; EXCLUDED.block_number
     </insert>
+
+    <update id="rewind">
+        UPDATE block_checkpoint
+        SET block_number = #{blockNumber},
+            block_hash = #{blockHash},
+            updated_by = #{actor},
+            updated_at = NOW()
+        WHERE chain_id = #{chainId} AND block_number &gt; #{blockNumber}
+    </update>
 </mapper>

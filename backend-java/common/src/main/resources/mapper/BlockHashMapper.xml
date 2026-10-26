@@ -20,4 +20,9 @@
         DELETE FROM block_hash
         WHERE chain_id = #{chainId} AND block_number &lt; #{minKeep}
     </delete>
+
+    <delete id="deleteAfter">
+        DELETE FROM block_hash
+        WHERE chain_id = #{chainId} AND block_number &gt; #{ancestor}
+    </delete>
 </mapper>

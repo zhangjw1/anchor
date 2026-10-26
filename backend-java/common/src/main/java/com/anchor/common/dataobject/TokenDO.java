@@ -4,6 +4,9 @@ import com.baomidou.mybatisplus.annotation.TableName;
 
 import java.time.LocalDateTime;
 
+/**
+ * token 表的一行。同一条链上地址唯一。
+ */
 @TableName("token")
 public class TokenDO {
     private Long chainId;

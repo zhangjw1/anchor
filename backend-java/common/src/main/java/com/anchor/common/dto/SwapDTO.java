@@ -2,6 +2,9 @@ package com.anchor.common.dto;
 
 import java.math.BigInteger;
 
+/**
+ * 带代币符号和精度的交换查询结果，不直接返回给接口。
+ */
 public class SwapDTO {
     private Long id;
     private Long chainId;
@@ -20,6 +23,7 @@ public class SwapDTO {
     private Integer tokenOutDecimals;
     private BigInteger amountOut;
     private String confirmStatus;
+    private int confirmations;
     private String watchedAddress;
 
     public Long getId() { return id; }
@@ -56,6 +60,8 @@ public class SwapDTO {
     public void setAmountOut(BigInteger amountOut) { this.amountOut = amountOut; }
     public String getConfirmStatus() { return confirmStatus; }
     public void setConfirmStatus(String confirmStatus) { this.confirmStatus = confirmStatus; }
+    public int getConfirmations() { return confirmations; }
+    public void setConfirmations(int confirmations) { this.confirmations = confirmations; }
     public String getWatchedAddress() { return watchedAddress; }
     public void setWatchedAddress(String watchedAddress) { this.watchedAddress = watchedAddress; }
 }

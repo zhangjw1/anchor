@@ -1,5 +1,7 @@
 package com.anchor.common.dto;
-
+/**
+ * 带交换统计的监控地址查询结果。
+ */
 public class WatchAddressDTO {
     private Long id;
     private Long chainId;

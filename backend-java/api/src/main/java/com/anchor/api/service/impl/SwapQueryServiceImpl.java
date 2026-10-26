@@ -3,8 +3,10 @@ package com.anchor.api.service.impl;
 import com.anchor.api.service.SwapQueryService;
 import com.anchor.common.chain.ChainRegistry;
 import com.anchor.common.constant.AnchorConstants;
+import com.anchor.common.dao.CheckpointMapper;
 import com.anchor.common.dao.SwapMapper;
 import com.anchor.common.domain.AnchorException;
+import com.anchor.common.domain.ConfirmStatusEnum;
 import com.anchor.common.domain.SwapDirectionEnum;
 import com.anchor.common.dto.SwapDTO;
 import com.anchor.common.query.SwapQuery;
@@ -13,15 +15,20 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import org.springframework.stereotype.Service;
 
+/**
+ * 按链、监控地址、协议和方向查询交换，并限制分页大小。
+ */
 @Service
 public class SwapQueryServiceImpl implements SwapQueryService {
 
     private final SwapMapper swapMapper;
     private final ChainRegistry chainRegistry;
+    private final CheckpointMapper checkpointMapper;
 
-    public SwapQueryServiceImpl(SwapMapper swapMapper, ChainRegistry chainRegistry) {
+    public SwapQueryServiceImpl(SwapMapper swapMapper, ChainRegistry chainRegistry, CheckpointMapper checkpointMapper) {
         this.swapMapper = swapMapper;
         this.chainRegistry = chainRegistry;
+        this.checkpointMapper = checkpointMapper;
     }
 
     @Override
@@ -43,7 +50,24 @@ public class SwapQueryServiceImpl implements SwapQueryService {
         if (pageSize < 1 || pageSize > AnchorConstants.MAX_PAGE_SIZE) {
             throw new AnchorException("INVALID_PAGE", "分页大小超出范围");
         }
-        return swapMapper.listByQuery(new Page<>(current, pageSize), query);
+        IPage<SwapDTO> result = swapMapper.listByQuery(new Page<>(current, pageSize), query);
+        fillConfirmations(chainId, result);
+        return result;
+    }
+
+    private void fillConfirmations(long chainId, IPage<SwapDTO> result) {
+        Long head = checkpointMapper.getBlockNumber(chainId);
+        for (SwapDTO row : result.getRecords()) {
+            row.setConfirmations(confirmations(row, head));
+        }
+    }
+
+    private static int confirmations(SwapDTO row, Long head) {
+        if (head == null || row.getBlockNumber() == null || ConfirmStatusEnum.REORGED.name().equals(row.getConfirmStatus())) {
+            return 0;
+        }
+        long value = head - row.getBlockNumber() + 1;
+        return value < 0 ? 0 : (int) value;
     }
 
     private static String parseDirection(String direction) {

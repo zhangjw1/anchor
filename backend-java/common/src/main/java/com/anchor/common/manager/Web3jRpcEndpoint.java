@@ -25,6 +25,9 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 
+/**
+ * 用 web3j 访问一个 HTTP JSON-RPC 节点。
+ */
 public final class Web3jRpcEndpoint implements RpcEndpoint {
 
     private final String url;
@@ -55,6 +58,17 @@ public final class Web3jRpcEndpoint implements RpcEndpoint {
     @Override
     public long latestBlockNumber() throws Exception {
         return web3j.ethBlockNumber().send().getBlockNumber().longValue();
+    }
+
+    @Override
+    public long finalizedBlockNumber() throws Exception {
+        EthBlock response = web3j.ethGetBlockByNumber(DefaultBlockParameterName.FINALIZED, false).send();
+        throwIfError(response);
+        EthBlock.Block block = response.getBlock();
+        if (block == null) {
+            throw new IllegalStateException("finalized block not found");
+        }
+        return block.getNumber().longValue();
     }
 
     @Override

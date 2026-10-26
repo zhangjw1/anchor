@@ -21,29 +21,40 @@ import org.springframework.context.annotation.Bean;
 
 import java.math.BigInteger;
 
+/**
+ * 装配链注册表、RPC 网关、分页插件和金额类型处理器。
+ */
 @AutoConfiguration
 @EnableConfigurationProperties(AnchorSettings.class)
 @MapperScan("com.anchor.common.dao")
 public class AnchorCommonAutoConfiguration {
-
+    /**
+     * 按配置文件创建链注册表。
+     */
     @Bean
     public ChainRegistry chainRegistry(AnchorSettings settings) {
         return new YamlChainRegistry(settings);
     }
-
+    /**
+     * 创建带故障切换和指标的 RPC 网关。
+     */
     @Bean
     public RpcGateway rpcGateway(ChainRegistry chainRegistry, ObjectProvider<MeterRegistry> meters) {
         MeterRegistry meterRegistry = meters.getIfAvailable(SimpleMeterRegistry::new);
         return new FailoverRpcGateway(chainRegistry, meterRegistry);
     }
-
+    /**
+     * PostgreSQL 分页插件。
+     */
     @Bean
     public MybatisPlusInterceptor mybatisPlusInterceptor() {
         MybatisPlusInterceptor interceptor = new MybatisPlusInterceptor();
         interceptor.addInnerInterceptor(new PaginationInnerInterceptor(DbType.POSTGRE_SQL));
         return interceptor;
     }
-
+    /**
+     * 把 BigInteger 按 NUMERIC 读写，避免金额被截断。
+     */
     @Bean
     public ConfigurationCustomizer anchorTypeHandlers() {
         return configuration -> configuration.getTypeHandlerRegistry()

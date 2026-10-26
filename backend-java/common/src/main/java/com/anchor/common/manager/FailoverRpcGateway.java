@@ -15,6 +15,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * 按节点顺序调用 RPC。失败后退避并换节点，次数用尽后抛出。
+ */
 public final class FailoverRpcGateway implements RpcGateway {
 
     private static final Logger log = LoggerFactory.getLogger(FailoverRpcGateway.class);
@@ -38,6 +41,11 @@ public final class FailoverRpcGateway implements RpcGateway {
     @Override
     public long latestBlockNumber(long chainId) {
         return execute(chainId, "eth_blockNumber", RpcEndpoint::latestBlockNumber);
+    }
+
+    @Override
+    public long finalizedBlockNumber(long chainId) {
+        return execute(chainId, "finalized", RpcEndpoint::finalizedBlockNumber);
     }
 
     @Override
@@ -87,19 +95,19 @@ public final class FailoverRpcGateway implements RpcGateway {
                     return value;
                 } catch (InterruptedException ex) {
                     Thread.currentThread().interrupt();
-                    throw new RpcException("rpc interrupted", ex);
+                    throw new RpcException("RPC 调用被中断", ex);
                 } catch (Exception ex) {
                     meterRegistry.counter("rpc.errors", "chainId", String.valueOf(chainId), "method", method, "url", node.url()).increment();
                     sample.stop(meterRegistry.timer("rpc.latency", "chainId", String.valueOf(chainId), "method", method, "url", node.url()));
                     last = new RpcException(ex.getMessage(), ex);
-                    log.warn("rpc failed chainId={} method={} url={} attempt={}", chainId, method, node.url(), attempt);
+                    log.warn("RPC 调用失败，chainId={}，method={}，url={}，第 {} 次", chainId, method, node.url(), attempt);
                 }
             }
             if (attempt < maxAttempts) {
                 sleep(backoffMillis * (1L << (attempt - 1)));
             }
         }
-        throw last == null ? new RpcException("rpc failed", null) : last;
+        throw last == null ? new RpcException("RPC 调用失败", null) : last;
     }
 
     private static void sleep(long millis) {
@@ -107,7 +115,7 @@ public final class FailoverRpcGateway implements RpcGateway {
             Thread.sleep(millis);
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
-            throw new RpcException("rpc interrupted", ex);
+            throw new RpcException("RPC 调用被中断", ex);
         }
     }
 

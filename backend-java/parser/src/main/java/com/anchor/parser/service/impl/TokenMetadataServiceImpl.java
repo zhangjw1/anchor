@@ -28,6 +28,9 @@ import java.time.ZoneOffset;
 import java.util.Arrays;
 import java.util.List;
 
+/**
+ * 原生币直接用链配置。ERC20 先查缓存，缺失时再读 symbol 和 decimals。
+ */
 @Service
 public class TokenMetadataServiceImpl implements TokenMetadataService {
 
@@ -92,7 +95,7 @@ public class TokenMetadataServiceImpl implements TokenMetadataService {
             String symbol = ((Utf8String) decoded.get(0)).getValue();
             return symbol == null || symbol.isBlank() ? bytes32Symbol(raw) : symbol;
         } catch (RuntimeException ex) {
-            log.warn("token symbol failed chainId={} address={}", chainId, address);
+            log.warn("读取代币符号失败，chainId={}，地址={}", chainId, address);
             return null;
         }
     }
@@ -106,7 +109,7 @@ public class TokenMetadataServiceImpl implements TokenMetadataService {
             }
             return ((Uint8) decoded.get(0)).getValue().intValue();
         } catch (RuntimeException ex) {
-            log.warn("token decimals failed chainId={} address={}", chainId, address);
+            log.warn("读取代币精度失败，chainId={}，地址={}", chainId, address);
             return null;
         }
     }

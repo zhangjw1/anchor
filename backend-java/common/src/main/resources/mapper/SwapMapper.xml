@@ -36,6 +36,7 @@
             amount_in = EXCLUDED.amount_in,
             amount_out = EXCLUDED.amount_out,
             watched_address = EXCLUDED.watched_address,
+            confirm_status = EXCLUDED.confirm_status,
             updated_by = EXCLUDED.updated_by,
             updated_at = NOW()
     </insert>
@@ -78,4 +79,26 @@
     <select id="countByChain" resultType="long">
         SELECT COUNT(*) FROM swap WHERE chain_id = #{chainId}
     </select>
+
+    <select id="listActive" resultType="com.anchor.common.dataobject.SwapDO">
+        SELECT chain_id, tx_hash, log_index, block_number, confirm_status, watched_address
+        FROM swap
+        WHERE chain_id = #{chainId}
+          AND block_number &lt;= #{head}
+          AND confirm_status IN ('CONFIRMING', 'CONFIRMED')
+    </select>
+
+    <update id="updateStatus">
+        UPDATE swap
+        SET confirm_status = #{status}, updated_by = #{actor}, updated_at = NOW()
+        WHERE chain_id = #{chainId} AND tx_hash = #{txHash} AND log_index = #{logIndex}
+    </update>
+
+    <update id="markReorgedAfter">
+        UPDATE swap
+        SET confirm_status = #{status}, updated_by = #{actor}, updated_at = NOW()
+        WHERE chain_id = #{chainId}
+          AND block_number &gt; #{ancestor}
+          AND confirm_status &lt;&gt; #{status}
+    </update>
 </mapper>

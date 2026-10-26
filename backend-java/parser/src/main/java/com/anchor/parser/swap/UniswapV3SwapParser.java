@@ -25,6 +25,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+/**
+ * 只保留工厂校验通过、且净输入和净输出都恰好一笔的 Uniswap V3 交换。
+ */
 @Service
 public class UniswapV3SwapParser implements SwapParser {
 
@@ -38,7 +41,9 @@ public class UniswapV3SwapParser implements SwapParser {
     public UniswapV3SwapParser(PoolFactoryLookup poolFactoryLookup) {
         this.poolFactoryLookup = poolFactoryLookup;
     }
-
+    /**
+     * 回执失败、池子数量不是一个，或净流量不唯一时返回空。
+     */
     @Override
     public Optional<ParsedSwap> parse(SwapParseContext context) {
         String factory = context.chain().contracts().uniswapV3Factory();
@@ -61,7 +66,7 @@ public class UniswapV3SwapParser implements SwapParser {
             }
         }
         if (inputs.size() != 1 || outputs.size() != 1) {
-            log.info("skip swap with mixed net flow chainId={} txHash={}", context.chain().chainId(), context.transaction().hash());
+            log.info("净流入流出不唯一，跳过该交换，chainId={}，交易={}", context.chain().chainId(), context.transaction().hash());
             return Optional.empty();
         }
         String tokenIn = inputs.get(0).getKey();

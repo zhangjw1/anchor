@@ -27,7 +27,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest(classes = ApiApplication.class, properties = "server.port=0")
+@SpringBootTest(classes = ApiApplication.class, properties = {
+        "server.port=0",
+        "anchor.kafka.enabled=false",
+        "spring.autoconfigure.exclude=org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration"
+})
 @AutoConfigureMockMvc
 @Testcontainers(disabledWithoutDocker = true)
 class SwapQueryIntegrationTest {

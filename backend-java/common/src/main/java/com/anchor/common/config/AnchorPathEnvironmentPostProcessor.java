@@ -12,8 +12,13 @@ import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * 工作目录不在模块根上时，向上查找 db/migrations，修正 Flyway 路径。
+ */
 public class AnchorPathEnvironmentPostProcessor implements EnvironmentPostProcessor, Ordered {
-
+    /**
+     * 配置的迁移目录已经存在时不改写。
+     */
     @Override
     public void postProcessEnvironment(ConfigurableEnvironment environment, SpringApplication application) {
         String configured = environment.getProperty("spring.flyway.locations", "");

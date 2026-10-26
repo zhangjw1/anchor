@@ -10,6 +10,9 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 
+/**
+ * 把链上大整数按数据库 NUMERIC 读写，避免超过 Long 后失真。
+ */
 public class BigIntegerNumericTypeHandler extends BaseTypeHandler<BigInteger> {
 
     @Override

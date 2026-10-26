@@ -247,7 +247,7 @@ components:
           description: 最小单位整数
     Swap:
       type: object
-      required: [id, chainId, txHash, logIndex, blockNumber, direction, dex, tokenIn, tokenOut, confirmStatus, watchedAddress]
+      required: [id, chainId, txHash, logIndex, blockNumber, direction, dex, tokenIn, tokenOut, confirmStatus, confirmations, watchedAddress]
       properties:
         id:
           type: string
@@ -275,6 +275,9 @@ components:
           $ref: "#/components/schemas/TokenAmount"
         confirmStatus:
           $ref: "#/components/schemas/ConfirmStatus"
+        confirmations:
+          type: integer
+          description: 相对已扫描块高的确认数，已回滚为 0
         watchedAddress:
           type: string
     SwapPage:

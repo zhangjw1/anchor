@@ -18,6 +18,9 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * 从 chains.yaml 加载链定义，并按 key、链 ID 建索引。
+ */
 public class YamlChainRegistry implements ChainRegistry {
 
     private final Map<String, ChainDefinition> byKey;
@@ -39,12 +42,16 @@ public class YamlChainRegistry implements ChainRegistry {
         this.byKey = Map.copyOf(keyed);
         this.byId = Map.copyOf(ids);
     }
-
+    /**
+     * 返回加载时的链顺序。
+     */
     @Override
     public List<ChainDefinition> all() {
         return List.copyOf(byKey.values());
     }
-
+    /**
+     * key 不存在时抛未知链。
+     */
     @Override
     public ChainDefinition requireByKey(String key) {
         ChainDefinition definition = byKey.get(key);
@@ -53,7 +60,9 @@ public class YamlChainRegistry implements ChainRegistry {
         }
         return definition;
     }
-
+    /**
+     * 链 ID 不存在时抛未知链。
+     */
     @Override
     public ChainDefinition requireById(long chainId) {
         ChainDefinition definition = byId.get(chainId);

@@ -1,5 +1,7 @@
 package com.anchor.common.query;
-
+/**
+ * 交换分页的查询条件。空字段表示不筛选。
+ */
 public class SwapQuery {
     private Long chainId;
     private String address;

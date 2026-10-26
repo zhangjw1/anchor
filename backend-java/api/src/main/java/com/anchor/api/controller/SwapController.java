@@ -8,6 +8,9 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * 按链和筛选条件分页查询交换。
+ */
 @Validated
 @RestController
 public class SwapController {
@@ -17,7 +20,9 @@ public class SwapController {
     public SwapController(SwapQueryService swapQueryService) {
         this.swapQueryService = swapQueryService;
     }
-
+    /**
+     * chainId 必填，地址、协议和方向可选。
+     */
     @GetMapping("/api/v1/swaps")
     public SwapPageVO swaps(@RequestParam @NotNull Long chainId, @RequestParam(required = false) String address,
                             @RequestParam(required = false) String dex, @RequestParam(required = false) String direction,

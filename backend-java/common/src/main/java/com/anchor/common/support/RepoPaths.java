@@ -4,11 +4,16 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
+/**
+ * 从当前目录向上查找仓库里的配置和迁移文件。
+ */
 public final class RepoPaths {
 
     private RepoPaths() {
     }
-
+    /**
+     * 逐级父目录查找相对路径，找不到返回 null。
+     */
     public static Path findUp(String relative) {
         Path cursor = Path.of("").toAbsolutePath();
         while (cursor != null) {
@@ -20,7 +25,9 @@ public final class RepoPaths {
         }
         return null;
     }
-
+    /**
+     * 先用配置的绝对或相对路径，找不到再向仓库根查找。
+     */
     public static Path resolveConfigured(String configured) {
         if (configured == null || configured.isBlank()) {
             throw new IllegalStateException("path is not configured");

@@ -1,6 +1,6 @@
 # Kafka 主题
 
-P1 不连接 Kafka。扫描器解析成功后直接写入 PostgreSQL，再推进 checkpoint。下面的格式留给 P2，Java 与 Go 共用。消息体是 JSON，key 和 value 都使用 UTF-8 字符串。
+P2 生产 `swap-events` 和 `chain-events`。解析仍在 indexer 进程内完成，落库并发送成功后才推进 checkpoint。`raw-blocks` 只保留格式，本期不生产、不消费。消息体是 JSON，key 和 value 都使用 UTF-8 字符串。Java 与 Go 共用。
 
 ## raw-blocks
 
@@ -8,10 +8,10 @@ P1 不连接 Kafka。扫描器解析成功后直接写入 PostgreSQL，再推进
 | --- | --- |
 | 名称 | `raw-blocks` |
 | key | `chainId` 的十进制字符串。同一条链进同一个分区，保证块顺序 |
-| 生产 | indexer，P2 |
-| 消费 | parser，P2 |
+| 生产 | 未实现 |
+| 消费 | 未实现 |
 
-投递成功之后才允许推进 checkpoint。无命中交易的块不发消息。
+无命中交易的块不发消息。下面的格式先留着，等解析器拆成独立消费者再用。
 
 ```json
 {
@@ -45,7 +45,7 @@ P1 不连接 Kafka。扫描器解析成功后直接写入 PostgreSQL，再推进
 
 ## swap-events
 
-P2 由解析器在落库后生产。P1 不生产。
+indexer 在 Swap 落库后生产。新入库和回滚后再次入库都发。
 
 | 项 | 值 |
 | --- | --- |
@@ -71,12 +71,14 @@ P2 由解析器在落库后生产。P1 不生产。
 
 ## chain-events
 
-P2 由确认模块生产。P1 不生产。
+indexer 的确认模块生产。`FINALIZED` 之后不再发送。
 
 | 项 | 值 |
 | --- | --- |
 | 名称 | `chain-events` |
 | key | `chainId` |
+
+确认数变化或状态变化：
 
 ```json
 {
@@ -86,8 +88,24 @@ P2 由确认模块生产。P1 不生产。
   "txHash": "0x123",
   "logIndex": 12,
   "confirmStatus": "CONFIRMED",
-  "confirmations": 10
+  "confirmations": 10,
+  "watchedAddress": "0xabc"
 }
 ```
 
-`type` 还预留 `REORG`。回滚时带 `depth` 和受影响的起始块号，具体字段在 P2 实现前再补进本文件，不在 P1 生产。
+`blockNumber` 是触发这次计算的已扫描块。`confirmations` = 该块号 − Swap 所在块号 + 1。`watchedAddress` 用于按地址过滤。
+
+回滚：
+
+```json
+{
+  "type": "REORG",
+  "chainId": 8453,
+  "depth": 2,
+  "ancestorBlock": 21432908,
+  "fromBlock": 21432909,
+  "toBlock": 21432910
+}
+```
+
+`depth` = 回退前的 checkpoint − `ancestorBlock`。受影响的是 `fromBlock` 到 `toBlock`，含两端。这些块上的 Swap 变为 `REORGED`，checkpoint 退到 `ancestorBlock`。

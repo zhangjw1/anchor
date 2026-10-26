@@ -2,6 +2,9 @@ package com.anchor.common.chain;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+/**
+ * anchor.* 配置，包括链文件、默认链和扫描开关。
+ */
 @ConfigurationProperties(prefix = "anchor")
 public class AnchorSettings {
 
@@ -32,7 +35,9 @@ public class AnchorSettings {
     public void setScanner(Scanner scanner) {
         this.scanner = scanner;
     }
-
+    /**
+     * 扫描器开关和轮询间隔。
+     */
     public static class Scanner {
         private boolean enabled;
         private long pollIntervalMs = 2000L;

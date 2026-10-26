@@ -1,5 +1,7 @@
 package com.anchor.common.constant;
-
+/**
+ * 扫描、RPC、分页和缓存的固定参数，避免业务代码里写魔数。
+ */
 public final class AnchorConstants {
 
     public static final String NATIVE_TOKEN_ADDRESS = "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
@@ -19,6 +21,11 @@ public final class AnchorConstants {
     public static final int WATCH_NAME_MAX_LENGTH = 128;
     public static final int WATCH_NOTE_MAX_LENGTH = 512;
     public static final int BATCH_SIZE = 500;
+    public static final int WS_REPLAY_LIMIT = 1000;
+    public static final long WS_PING_INTERVAL_MS = 15_000L;
+    public static final long WS_METRICS_INTERVAL_MS = 3_000L;
+    public static final int KAFKA_SEND_TIMEOUT_SECONDS = 10;
+    public static final String KAFKA_GROUP_API = "anchor-api";
 
     private AnchorConstants() {
     }

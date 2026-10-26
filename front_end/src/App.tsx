@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Header } from './components/Header';
 import { WatchlistPanel } from './components/WatchlistPanel';
 import { RecentSwapsPanel } from './components/RecentSwapsPanel';
@@ -7,209 +7,154 @@ import { SwapPanel } from './components/SwapPanel';
 import { FooterBar } from './components/FooterBar';
 import { TxDetailModal } from './components/TxDetailModal';
 import { AccountModal } from './components/AccountModal';
-import { 
-  INITIAL_WATCHLIST, 
-  INITIAL_SWAPS, 
-  INITIAL_TOKENS, 
-  NETWORKS 
-} from './mock/initialData';
-import { WatchAddress, SwapTransaction, Token, NetworkConfig } from './types';
-import { CONFIRMATION_TARGET, createMockHash, FEED_LIMIT, formatAmount } from './utils/swap';
+import { ApiError, ConfirmStatus, SwapDto, WatchAddressDto, createWatchAddress, deleteWatchAddress, listSwaps, listWatchAddresses } from './api/anchor';
+import { INITIAL_TOKENS, NETWORKS } from './mock/initialData';
+import { WatchAddress, SwapTransaction, Token, NetworkConfig, SwapStatus } from './types';
+import { CONFIRMATION_TARGET } from './utils/swap';
+
+const POLL_MS = 3000;
+
+function shortAddress(address: string) {
+  return `${address.slice(0, 6)}...${address.slice(-4)}`;
+}
+
+function humanAmount(amount: string, decimals: number | null) {
+  const scale = decimals ?? 18;
+  const negative = amount.startsWith('-');
+  const digits = (negative ? amount.slice(1) : amount).replace(/^0+/, '') || '0';
+  const padded = digits.padStart(scale + 1, '0');
+  const whole = padded.slice(0, padded.length - scale);
+  const fraction = padded.slice(padded.length - scale).replace(/0+$/, '');
+  const value = Number(fraction ? `${whole}.${fraction}` : whole);
+  return Number.isFinite(value) ? value : 0;
+}
+
+function tokenLabel(symbol: string | null, address: string) {
+  return symbol || shortAddress(address);
+}
+
+function toWatch(item: WatchAddressDto): WatchAddress {
+  return {
+    id: item.id,
+    name: item.name || shortAddress(item.address),
+    address: item.address,
+    tag: item.tag,
+    addedAt: item.createdAt,
+    note: item.note || undefined,
+    swapCount: item.swapCount,
+    lastActiveAt: item.lastActiveAt,
+  };
+}
+
+function toStatus(status: ConfirmStatus): SwapStatus {
+  if (status === 'REORGED') {
+    return { type: 'reorg', label: '已回滚 reorg' };
+  }
+  if (status === 'CONFIRMING') {
+    return { type: 'confirming', current: 0, total: 0 };
+  }
+  return { type: 'finalized', label: status === 'FINALIZED' ? '已最终确认' : '已确认' };
+}
+
+function toSwap(item: SwapDto, names: Map<string, string>): SwapTransaction {
+  const fromToken = tokenLabel(item.tokenIn.symbol, item.tokenIn.address);
+  const toToken = tokenLabel(item.tokenOut.symbol, item.tokenOut.address);
+  return {
+    id: item.id,
+    txHash: item.txHash,
+    direction: item.direction,
+    pair: { fromToken, toToken },
+    dex: item.dex,
+    amount: '',
+    rawAmount: humanAmount(item.tokenOut.amount, item.tokenOut.decimals),
+    amountToken: toToken,
+    paidAmount: humanAmount(item.tokenIn.amount, item.tokenIn.decimals),
+    status: toStatus(item.confirmStatus),
+    timestamp: item.timestamp,
+    senderAddress: item.watchedAddress,
+    recipientAddress: item.watchedAddress,
+    gasFeeUsd: 0,
+    gasUsed: 0,
+    blockNumber: item.blockNumber,
+    watchedAddressMatch: names.get(item.watchedAddress) || shortAddress(item.watchedAddress),
+  };
+}
 
 export default function App() {
   const [network, setNetwork] = useState<NetworkConfig>(NETWORKS[0]);
-  const [watchlist, setWatchlist] = useState<WatchAddress[]>(INITIAL_WATCHLIST);
+  const [watchlist, setWatchlist] = useState<WatchAddress[]>([]);
   const [selectedWatchId, setSelectedWatchId] = useState<string | null>(null);
-  const [swaps, setSwaps] = useState<SwapTransaction[]>(INITIAL_SWAPS);
+  const [swaps, setSwaps] = useState<SwapTransaction[]>([]);
   const [tokens, setTokens] = useState<Record<string, Token>>(INITIAL_TOKENS);
   const [userAddress, setUserAddress] = useState<string>('0x94A1F29b3112E849C01132890bF20c1590748920');
-  const [latestBlock, setLatestBlock] = useState<number>(21432908);
+  const [latestBlock, setLatestBlock] = useState<number>(0);
   const [isStreaming, setIsStreaming] = useState<boolean>(true);
-  const latestBlockRef = useRef(latestBlock);
-  useEffect(() => { latestBlockRef.current = latestBlock; }, [latestBlock]);
+  const [feedError, setFeedError] = useState<string | null>(null);
   const [activeTx, setActiveTx] = useState<SwapTransaction | null>(null);
   const [isAccountModalOpen, setIsAccountModalOpen] = useState<boolean>(false);
-
-  // Responsive mobile active tab (for small screens)
   const [mobileTab, setMobileTab] = useState<'watch' | 'swaps' | 'swap'>('swaps');
+  const selectedAddressRef = useRef<string | undefined>(undefined);
+  selectedAddressRef.current = watchlist.find((item) => item.id === selectedWatchId)?.address;
 
-  // Handle adding a new address to watchlist
-  const handleAddWatchAddress = (address: string, name?: string, tag: WatchAddress['tag'] = 'WATCH') => {
-    if (!/^0x[0-9a-fA-F]{40}$/.test(address) || watchlist.some((item) => item.address.toLowerCase() === address.toLowerCase())) return;
-    const newEntry: WatchAddress = {
-      id: `w-${Date.now()}`,
-      name: name || `Watched ${address.slice(0, 6)}...`,
-      address,
-      tag,
-      addedAt: Date.now(),
+  const refreshFeed = useCallback(async (chainId: number, address?: string) => {
+    const [addresses, page] = await Promise.all([
+      listWatchAddresses(chainId),
+      listSwaps(chainId, address),
+    ]);
+    const names = new Map(addresses.map((item) => [item.address, item.name || shortAddress(item.address)]));
+    setWatchlist(addresses.map(toWatch));
+    setSwaps(page.items.map((item) => toSwap(item, names)));
+    setLatestBlock(page.items.reduce((max, item) => Math.max(max, item.blockNumber), 0));
+    setFeedError(null);
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = () => {
+      refreshFeed(network.chainId, selectedAddressRef.current).catch((error: unknown) => {
+        if (!cancelled) {
+          setFeedError(error instanceof ApiError ? error.message : '地址簿或成交列表加载失败');
+        }
+      });
     };
-    setWatchlist((prev) => [newEntry, ...prev]);
+    load();
+    if (!isStreaming) {
+      return () => {
+        cancelled = true;
+      };
+    }
+    const timer = window.setInterval(load, POLL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [isStreaming, network.chainId, refreshFeed, selectedWatchId]);
+
+  const handleAddWatchAddress = async (address: string, name?: string, tag: WatchAddress['tag'] = 'WATCH') => {
+    await createWatchAddress({ chainId: network.chainId, address, name, tag });
+    const selected = watchlist.find((item) => item.id === selectedWatchId);
+    await refreshFeed(network.chainId, selected?.address);
   };
 
-  // Handle deleting an address from watchlist
-  const handleDeleteWatchAddress = (id: string) => {
-    setWatchlist((prev) => prev.filter((w) => w.id !== id));
+  const handleDeleteWatchAddress = async (id: string) => {
+    await deleteWatchAddress(id);
     if (selectedWatchId === id) {
       setSelectedWatchId(null);
     }
+    await refreshFeed(network.chainId);
   };
 
-  // Filter swaps if a watchlist item is chosen
-  const activeWatchedAddress = watchlist.find((w) => w.id === selectedWatchId);
-  const displaySwaps = activeWatchedAddress
-    ? swaps.filter(
-        (s) =>
-          s.senderAddress.toLowerCase() === activeWatchedAddress.address.toLowerCase() ||
-          s.recipientAddress.toLowerCase() === activeWatchedAddress.address.toLowerCase() ||
-          s.watchedAddressMatch === activeWatchedAddress.name
-      )
-    : swaps;
-
-  // Simulate on-chain block ticking and progressive confirmations
-  useEffect(() => {
-    if (!isStreaming) return;
-
-    const blockInterval = setInterval(() => {
-      setLatestBlock((b) => b + 1);
-
-      // Advance any confirming transactions
-      setSwaps((prevSwaps) =>
-        prevSwaps.map((tx) => {
-          if (tx.status.type === 'confirming') {
-            const nextCurrent = tx.status.current + 1;
-            if (nextCurrent >= tx.status.total) {
-              return {
-                ...tx,
-                status: { type: 'finalized', label: '已确认' },
-              };
-            }
-            return {
-              ...tx,
-              status: { ...tx.status, current: nextCurrent },
-            };
-          }
-          return tx;
-        })
-      );
-    }, network.blockTimeSec * 1000);
-
-    return () => clearInterval(blockInterval);
-  }, [isStreaming, network.blockTimeSec]);
-
-  // Periodic random new incoming swaps to keep the dashboard live and authentic
-  useEffect(() => {
-    if (!isStreaming) return;
-
-    const randomFeedInterval = setInterval(() => {
-      const dexes: SwapTransaction['dex'][] = ['Uniswap V3', '1inch', 'Aerodrome', 'SushiSwap'];
-      const pairs = [
-        { from: 'USDC', to: 'WETH', amount: '+0.45 WETH', raw: 0.45, token: 'WETH' },
-        { from: 'WETH', to: 'AERO', amount: '+3,200 AERO', raw: 3200, token: 'AERO' },
-        { from: 'USDC', to: 'DEGEN', amount: '+95.2k DEGEN', raw: 95200, token: 'DEGEN', isAgg: true },
-        { from: 'cbETH', to: 'WETH', amount: '+1.80 WETH', raw: 1.8, token: 'WETH' },
-      ];
-
-      const chosenDex = dexes[Math.floor(Math.random() * dexes.length)];
-      const chosenPair = pairs[Math.floor(Math.random() * pairs.length)];
-      const isWatched = Math.random() > 0.4;
-      const matchedWhale = isWatched ? watchlist[Math.floor(Math.random() * watchlist.length)] : null;
-
-      const newTx: SwapTransaction = {
-        id: `tx-${Date.now()}`,
-        txHash: createMockHash(),
-        direction: chosenPair.to === 'USDC' ? 'SELL' : 'BUY',
-        pair: {
-          fromToken: chosenPair.from,
-          toToken: chosenPair.to,
-          hops: chosenPair.isAgg ? ['USDC', 'WETH', 'DEGEN'] : undefined,
-          isAggregator: chosenPair.isAgg,
-          aggregatorLabel: chosenPair.isAgg ? '聚合器' : undefined,
-        },
-        dex: chosenDex,
-        amount: chosenPair.amount,
-        rawAmount: chosenPair.raw,
-        amountToken: chosenPair.token,
-        paidAmount: chosenPair.raw * INITIAL_TOKENS[chosenPair.to].priceUsd / INITIAL_TOKENS[chosenPair.from].priceUsd,
-        status: { type: 'confirming', current: 1, total: CONFIRMATION_TARGET },
-        timestamp: Date.now(),
-        timeDisplay: '1s ago',
-        senderAddress: matchedWhale ? matchedWhale.address : `0x${Array.from({ length: 40 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`,
-        recipientAddress: matchedWhale ? matchedWhale.address : `0x${Array.from({ length: 40 }, () => Math.floor(Math.random() * 16).toString(16)).join('')}`,
-        gasFeeUsd: 0.015,
-        gasUsed: 128000,
-        blockNumber: latestBlockRef.current,
-        watchedAddressMatch: matchedWhale ? matchedWhale.name : undefined,
-      };
-
-      setSwaps((prev) => [newTx, ...prev.slice(0, FEED_LIMIT - 1)]);
-    }, 6000);
-
-    return () => clearInterval(randomFeedInterval);
-  }, [isStreaming, watchlist]);
-
-  // Execute Swap action from right panel
   const handleExecuteSwap = (fromToken: string, toToken: string, fromAmt: number, toAmt: number, hash: string) => {
     if (!tokens[fromToken] || !tokens[toToken] || fromToken === toToken || !Number.isFinite(fromAmt) || !Number.isFinite(toAmt) || fromAmt <= 0 || toAmt <= 0 || fromAmt > tokens[fromToken].balance || !/^0x[0-9a-fA-F]{64}$/.test(hash)) return;
-    // Deduct and credit
     setTokens((prev) => {
       const fromObj = prev[fromToken];
       const toObj = prev[toToken];
       if (!fromObj || !toObj) return prev;
-
       return {
         ...prev,
-        [fromToken]: {
-          ...fromObj,
-          balance: fromObj.balance - fromAmt,
-        },
-        [toToken]: {
-          ...toObj,
-          balance: toObj.balance + toAmt,
-        },
+        [fromToken]: { ...fromObj, balance: fromObj.balance - fromAmt },
+        [toToken]: { ...toObj, balance: toObj.balance + toAmt },
       };
-    });
-
-    // Create record in recent swaps
-    const newTx: SwapTransaction = {
-      id: `tx-user-${Date.now()}`,
-      txHash: hash,
-      direction: toToken === 'USDC' ? 'SELL' : 'BUY',
-      pair: {
-        fromToken,
-        toToken,
-      },
-      dex: 'Uniswap V3',
-      amount: `+${formatAmount(toAmt, toToken, true)} ${toToken}`,
-      rawAmount: toAmt,
-      amountToken: toToken,
-      paidAmount: fromAmt,
-      status: { type: 'finalized', label: '已确认' },
-      timestamp: Date.now(),
-      timeDisplay: '刚刚',
-      senderAddress: userAddress,
-      recipientAddress: userAddress,
-      gasFeeUsd: 0.019,
-      gasUsed: 145000,
-      blockNumber: latestBlock,
-    };
-
-    setSwaps((prev) => [newTx, ...prev.slice(0, FEED_LIMIT - 1)]);
-  };
-
-  // Simulate Reorg event
-  const handleTriggerReorg = () => {
-
-    // Pick a recent confirming or finalized swap and roll it back
-    setSwaps((prev) => {
-      const nonReorgIdx = prev.findIndex((s) => s.status.type !== 'reorg');
-      if (nonReorgIdx === -1) return prev;
-
-      const updated = [...prev];
-      updated[nonReorgIdx] = {
-        ...updated[nonReorgIdx],
-        status: { type: 'reorg', label: '已回滚 reorg' },
-      };
-      return updated;
     });
   };
 
@@ -269,6 +214,10 @@ export default function App() {
         </button>
       </div>
 
+      {feedError && (
+        <div className="bg-rose-50 text-rose-700 text-xs px-4 py-2 border-b border-rose-100 shrink-0">{feedError}</div>
+      )}
+
       {/* Main 3-Column Dashboard Body */}
       <main className="flex-1 flex overflow-hidden">
         {/* Left Column: Watchlist (Hidden on mobile unless selected) */}
@@ -295,12 +244,11 @@ export default function App() {
           }`}
         >
           <RecentSwapsPanel
-            swaps={displaySwaps}
+            swaps={swaps}
             onSelectTx={setActiveTx}
             latestBlock={latestBlock}
             isStreaming={isStreaming}
             onToggleStreaming={() => setIsStreaming(!isStreaming)}
-            onTriggerReorgSimulation={handleTriggerReorg}
             explorerUrl={network.explorerUrl}
           />
         </section>

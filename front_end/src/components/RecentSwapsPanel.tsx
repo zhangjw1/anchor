@@ -22,7 +22,7 @@ interface RecentSwapsPanelProps {
   latestBlock: number;
   isStreaming: boolean;
   onToggleStreaming: () => void;
-  onTriggerReorgSimulation: () => void;
+  onTriggerReorgSimulation?: () => void;
   explorerUrl: string;
 }
 
@@ -146,7 +146,7 @@ export const RecentSwapsPanel: React.FC<RecentSwapsPanelProps> = ({
                   onClick={() => setDirectionDropdownOpen(false)} 
                 />
                 <div className="absolute right-0 mt-1 w-28 bg-white border border-slate-200 rounded-md shadow-lg z-50 py-1">
-                  {(['ALL', 'BUY', 'SELL'] as const).map((dir) => (
+                  {(['ALL', 'BUY', 'SELL', 'SWAP'] as const).map((dir) => (
                     <button
                       key={dir}
                       onClick={() => {
@@ -222,8 +222,10 @@ export const RecentSwapsPanel: React.FC<RecentSwapsPanelProps> = ({
                         <del className="text-slate-400">{tx.direction}</del>
                       ) : tx.direction === 'BUY' ? (
                         <span className="text-emerald-600">{tx.direction}</span>
-                      ) : (
+                      ) : tx.direction === 'SELL' ? (
                         <span className="text-rose-500">{tx.direction}</span>
+                      ) : (
+                        <span className="text-slate-600">{tx.direction}</span>
                       )}
                     </td>
 
@@ -264,7 +266,7 @@ export const RecentSwapsPanel: React.FC<RecentSwapsPanelProps> = ({
                         <span className="text-rose-600 font-semibold text-xs flex items-center gap-1">
                           已回滚 reorg
                         </span>
-                      ) : tx.status.type === 'confirming' && tx.status.current < tx.status.total ? (
+                      ) : tx.status.type === 'confirming' && tx.status.total > 0 && tx.status.current < tx.status.total ? (
                         <div className="w-28 space-y-1">
                           <div className="text-blue-600 font-mono text-[11px] font-bold">
                             {tx.status.current}/{tx.status.total} 确认
@@ -278,6 +280,8 @@ export const RecentSwapsPanel: React.FC<RecentSwapsPanelProps> = ({
                             />
                           </div>
                         </div>
+                      ) : tx.status.type === 'confirming' ? (
+                        <span className="text-blue-600 font-semibold text-[11px]">确认中</span>
                       ) : (
                         <span className="text-emerald-600 font-semibold text-[11px]">
                           已确认
@@ -312,20 +316,22 @@ export const RecentSwapsPanel: React.FC<RecentSwapsPanelProps> = ({
       <div className="p-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-400 shrink-0 select-none">
         <div className="flex items-center gap-3">
           <span>显示 {filteredSwaps.length} 条</span>
-          <button
-            onClick={onTriggerReorgSimulation}
-            className="text-[10px] text-slate-400 hover:text-rose-600 hover:underline transition-colors cursor-pointer hidden md:inline"
-            title="模拟一次区块链深重组 (Reorg) 事务回滚"
-          >
-            [测试 Reorg 告警]
-          </button>
+          {onTriggerReorgSimulation && (
+            <button
+              onClick={onTriggerReorgSimulation}
+              className="text-[10px] text-slate-400 hover:text-rose-600 hover:underline transition-colors cursor-pointer hidden md:inline"
+              title="模拟一次区块链深重组 (Reorg) 事务回滚"
+            >
+              [测试 Reorg 告警]
+            </button>
+          )}
         </div>
 
         <div className="flex items-center gap-4 font-mono">
           <span>
             最新区块：<strong className="text-slate-600 font-bold">{latestBlock.toLocaleString()}</strong>
           </span>
-          <span>检索：42ms</span>
+          <span>{isStreaming ? '每 3 秒刷新' : '已暂停'}</span>
         </div>
       </div>
     </div>

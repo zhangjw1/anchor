@@ -1,0 +1,80 @@
+# 链注册表。合约地址只从这里读取。
+# TODO（官方文档本次未核实，未写入地址）：
+# - base-sepolia 的 USDC、USDbC、Aerodrome Router/Factory
+# - 1inch、0x、KyberSwap 在 Base 上的 Router
+
+chains:
+  - key: base
+    chainId: 8453
+    name: Base
+    type: EVM
+    testnet: false
+    confirmationBlocks: 10
+    gasModel: EIP1559_OP_L1_FEE
+    signModes:
+      - CLIENT
+    nativeToken:
+      symbol: ETH
+      decimals: 18
+      address: "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    rpc:
+      - url: https://mainnet.base.org
+        requestsPerSecond: 10
+      # 第二个节点留空。接入 Alchemy / QuickNode 时在此追加 url，不要把同一公共节点写两遍，否则限速会叠加。
+    contracts:
+      weth: "0x4200000000000000000000000000000000000006"
+      usdc: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+      usdbc: "0xd9aAEc86B65D86f6A7B5B1b0c42FFA531710b6CA"
+      multicall3: "0xcA11bde05977b3631167028862bE2a173976CA11"
+      gasPriceOracle: "0x420000000000000000000000000000000000000F"
+      uniswapV3Factory: "0x33128a8fC17869897dcE68Ed026d694621f6FDfD"
+      quoterV2: "0x3d4e44Eb1374240CE5F1B871ab261CD16335B76a"
+      swapRouter02: "0x2626664c2603336E57B271c5C0b26F421741e481"
+      uniswapV2Factory: "0x8909Dc15e40173Ff4699343b6eB8132c65e18eC6"
+      uniswapV2Router: "0x4752ba5dbc23f44d87826276bf6fd6b1c372ad24"
+      aerodromeRouter: "0xcF77a3Ba9A5CA399B7c97c74d54e5b1Beb874E43"
+      aerodromeFactory: "0x420DD381b31aEf6683db6B902084cB0FFECe40Da"
+    quoteTokens:
+      - "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      - "0x4200000000000000000000000000000000000006"
+      - "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+      - "0xd9aAEc86B65D86f6A7B5B1b0c42FFA531710b6CA"
+    aggregators:
+      - name: Uniswap UniversalRouter
+        address: "0x6fF5693b99212Da76ad316178A184AB56D299b43"
+      - name: Odos V2 Router
+        address: "0x19cEeAd7105607Cd444F5ad10dd51356436095a1"
+
+  - key: base-sepolia
+    chainId: 84532
+    name: Base Sepolia
+    type: EVM
+    testnet: true
+    confirmationBlocks: 5
+    gasModel: EIP1559_OP_L1_FEE
+    signModes:
+      - CLIENT
+      - HOT_WALLET
+    nativeToken:
+      symbol: ETH
+      decimals: 18
+      address: "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+    rpc:
+      - url: https://sepolia.base.org
+        requestsPerSecond: 10
+      # 第二个节点留空，接入备用 RPC 时追加。
+    contracts:
+      weth: "0x4200000000000000000000000000000000000006"
+      multicall3: "0xcA11bde05977b3631167028862bE2a173976CA11"
+      gasPriceOracle: "0x420000000000000000000000000000000000000F"
+      uniswapV3Factory: "0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24"
+      quoterV2: "0xC5290058841028F1614F3A6F0F5816cAd0df5E27"
+      swapRouter02: "0x94cC0AaC535CCDB3C01d6787D6413C739ae12bc4"
+      uniswapV2Factory: "0x7Ae58f10f7849cA6F5fB71b7f45CB416c9204b1e"
+      uniswapV2Router: "0x1689E7B1F10000AE47eBfE339a4f69dECd19F602"
+    quoteTokens:
+      - "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      - "0x4200000000000000000000000000000000000006"
+    aggregators:
+      - name: Uniswap UniversalRouter
+        address: "0x492E6456D9528771018DeB9E87ef7750EF184104"

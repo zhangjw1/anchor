@@ -1,0 +1,10 @@
+spring:
+  config:
+    import: classpath:anchor-defaults.yml
+  application:
+    name: anchor-indexer
+server:
+  port: 8081
+anchor:
+  scanner:
+    enabled: true

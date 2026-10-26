@@ -66,6 +66,11 @@ export const TxDetailModal: React.FC<TxDetailModalProps> = ({
                 </div>
               </div>
             </div>
+          ) : tx.status.type === 'confirming' && tx.status.total === 0 ? (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-blue-900 flex items-start gap-2.5">
+              <Clock className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />
+              <div className="font-bold">确认中。本期只记录成交，确认数尚未更新。</div>
+            </div>
           ) : tx.status.type === 'confirming' ? (
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-blue-900 flex items-start gap-2.5">
               <Clock className="w-4 h-4 text-blue-600 shrink-0 mt-0.5" />

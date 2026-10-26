@@ -1,0 +1,7 @@
+spring:
+  config:
+    import: classpath:anchor-defaults.yml
+  application:
+    name: anchor-parser
+server:
+  port: 8082

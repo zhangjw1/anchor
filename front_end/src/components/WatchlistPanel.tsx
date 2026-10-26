@@ -8,8 +8,8 @@ interface WatchlistPanelProps {
   swaps: SwapTransaction[];
   selectedAddressId: string | null;
   onSelectAddress: (id: string | null) => void;
-  onAddAddress: (address: string, name?: string, tag?: WatchAddress['tag']) => void;
-  onDeleteAddress: (id: string) => void;
+  onAddAddress: (address: string, name?: string, tag?: WatchAddress['tag']) => Promise<void>;
+  onDeleteAddress: (id: string) => Promise<void>;
   explorerUrl: string;
 }
 
@@ -34,22 +34,32 @@ export const WatchlistPanel: React.FC<WatchlistPanelProps> = ({
   };
   const [customTag, setCustomTag] = useState<WatchAddress['tag']>('WATCH');
 
-  const handleQuickAdd = (e: React.FormEvent) => {
+  const handleQuickAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     const clean = inputVal.trim();
     if (!validateAddress(clean)) return;
-    onAddAddress(clean);
-    setInputVal('');
+    try {
+      await onAddAddress(clean);
+      setInputVal('');
+      setInputError('');
+    } catch (error) {
+      setInputError(error instanceof Error ? error.message : '添加失败');
+    }
   };
 
-  const handleModalAdd = (e: React.FormEvent) => {
+  const handleModalAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     const clean = inputVal.trim();
     if (!validateAddress(clean)) return;
-    onAddAddress(clean, customName.trim() || undefined, customTag);
-    setInputVal('');
-    setCustomName('');
-    setIsAddModalOpen(false);
+    try {
+      await onAddAddress(clean, customName.trim() || undefined, customTag);
+      setInputVal('');
+      setCustomName('');
+      setInputError('');
+      setIsAddModalOpen(false);
+    } catch (error) {
+      setInputError(error instanceof Error ? error.message : '添加失败');
+    }
   };
 
   const copyToClipboard = (addr: string, id: string, e: React.MouseEvent) => {
@@ -128,7 +138,8 @@ export const WatchlistPanel: React.FC<WatchlistPanelProps> = ({
             const isSelected = selectedAddressId === item.id;
             const address = item.address.toLowerCase();
             const activity = swaps.filter((tx) => tx.senderAddress.toLowerCase() === address || tx.recipientAddress.toLowerCase() === address);
-            const lastActive = activity.length ? Math.max(...activity.map((tx) => tx.timestamp)) : null;
+            const swapCount = item.swapCount ?? activity.length;
+            const lastActive = item.lastActiveAt ?? (activity.length ? Math.max(...activity.map((tx) => tx.timestamp)) : null);
             return (
               <div
                 key={item.id}
@@ -164,7 +175,7 @@ export const WatchlistPanel: React.FC<WatchlistPanelProps> = ({
                 </div>
 
                 <div className="text-[10px] text-slate-500 mt-1 mb-1 space-y-0.5">
-                  <div>Swap 次数 <span className="font-mono font-semibold text-slate-700">{activity.length}</span></div>
+                  <div>Swap 次数 <span className="font-mono font-semibold text-slate-700">{swapCount}</span></div>
                   <div>最近活跃时间 <span>{lastActive ? formatRelativeTime(lastActive) : '暂无交易'}</span></div>
                 </div>
                 {/* Bottom Row: Address and Quick Actions */}
@@ -195,18 +206,16 @@ export const WatchlistPanel: React.FC<WatchlistPanelProps> = ({
                     >
                       <ExternalLink className="w-3 h-3" />
                     </a>
-                    {watchlist.length > 1 && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onDeleteAddress(item.id);
-                        }}
-                        title="删除该监控"
-                        className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded cursor-pointer"
-                      >
-                        <Trash2 className="w-3 h-3" />
-                      </button>
-                    )}
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDeleteAddress(item.id).catch(() => undefined);
+                      }}
+                      title="删除该监控"
+                      className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded cursor-pointer"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
                   </div>
                 </div>
               </div>

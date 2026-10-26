@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.anchor.common.persistence.mapper.WatchAddressMapper">
+    <select id="listAddresses" resultType="string">
+        SELECT address FROM watched_address WHERE chain_id = #{chainId}
+    </select>
+
+    <select id="listByChain" resultType="com.anchor.common.persistence.model.WatchAddressRow">
+        SELECT w.id,
+               w.chain_id,
+               w.address,
+               w.name,
+               w.tag,
+               w.note,
+               COALESCE(s.swap_count, 0) AS swap_count,
+               s.last_active_at,
+               (EXTRACT(EPOCH FROM w.created_at) * 1000)::bigint AS created_at_ms
+        FROM watched_address w
+        LEFT JOIN (
+            SELECT watched_address,
+                   COUNT(*) AS swap_count,
+                   MAX(block_timestamp) * 1000 AS last_active_at
+            FROM swap
+            WHERE chain_id = #{chainId}
+            GROUP BY watched_address
+        ) s ON s.watched_address = w.address
+        WHERE w.chain_id = #{chainId}
+        ORDER BY w.id DESC
+    </select>
+</mapper>

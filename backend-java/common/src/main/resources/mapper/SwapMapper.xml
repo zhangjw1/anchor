@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.anchor.common.persistence.mapper.SwapMapper">
+    <resultMap id="swapRow" type="com.anchor.common.persistence.model.SwapRow" autoMapping="true">
+        <result column="amount_in" property="amountIn"
+                typeHandler="com.anchor.common.persistence.typehandler.BigIntegerNumericTypeHandler"/>
+        <result column="amount_out" property="amountOut"
+                typeHandler="com.anchor.common.persistence.typehandler.BigIntegerNumericTypeHandler"/>
+    </resultMap>
+    <insert id="upsertBatch">
+        INSERT INTO swap (
+            chain_id, tx_hash, log_index, block_number, block_hash, block_timestamp,
+            tx_from, tx_to, dex, direction, token_in, token_out, amount_in, amount_out,
+            confirm_status, watched_address, created_by, updated_by
+        ) VALUES
+        <foreach collection="list" item="item" separator=",">
+            (
+                #{item.chainId}, #{item.txHash}, #{item.logIndex}, #{item.blockNumber}, #{item.blockHash},
+                #{item.blockTimestamp}, #{item.txFrom}, #{item.txTo}, #{item.dex}, #{item.direction},
+                #{item.tokenIn}, #{item.tokenOut},
+                #{item.amountIn, typeHandler=com.anchor.common.persistence.typehandler.BigIntegerNumericTypeHandler},
+                #{item.amountOut, typeHandler=com.anchor.common.persistence.typehandler.BigIntegerNumericTypeHandler},
+                #{item.confirmStatus}, #{item.watchedAddress}, #{item.createdBy}, #{item.updatedBy}
+            )
+        </foreach>
+        ON CONFLICT (chain_id, tx_hash, log_index) DO UPDATE SET
+            block_number = EXCLUDED.block_number,
+            block_hash = EXCLUDED.block_hash,
+            block_timestamp = EXCLUDED.block_timestamp,
+            tx_from = EXCLUDED.tx_from,
+            tx_to = EXCLUDED.tx_to,
+            dex = EXCLUDED.dex,
+            direction = EXCLUDED.direction,
+            token_in = EXCLUDED.token_in,
+            token_out = EXCLUDED.token_out,
+            amount_in = EXCLUDED.amount_in,
+            amount_out = EXCLUDED.amount_out,
+            watched_address = EXCLUDED.watched_address,
+            updated_by = EXCLUDED.updated_by,
+            updated_at = NOW()
+    </insert>
+
+    <select id="selectPageByFilter" resultMap="swapRow">
+        SELECT sw.id,
+               sw.chain_id,
+               sw.tx_hash,
+               sw.log_index,
+               sw.block_number,
+               sw.block_timestamp * 1000 AS timestamp_ms,
+               sw.direction,
+               sw.dex,
+               sw.token_in,
+               tin.symbol AS token_in_symbol,
+               tin.decimals AS token_in_decimals,
+               sw.amount_in,
+               sw.token_out,
+               tout.symbol AS token_out_symbol,
+               tout.decimals AS token_out_decimals,
+               sw.amount_out,
+               sw.confirm_status,
+               sw.watched_address
+        FROM swap sw
+        LEFT JOIN token tin ON tin.chain_id = sw.chain_id AND tin.address = sw.token_in
+        LEFT JOIN token tout ON tout.chain_id = sw.chain_id AND tout.address = sw.token_out
+        WHERE sw.chain_id = #{query.chainId}
+        <if test="query.address != null and query.address != ''">
+            AND sw.watched_address = #{query.address}
+        </if>
+        <if test="query.dex != null and query.dex != ''">
+            AND sw.dex = #{query.dex}
+        </if>
+        <if test="query.direction != null and query.direction != ''">
+            AND sw.direction = #{query.direction}
+        </if>
+        ORDER BY sw.block_number DESC, sw.log_index DESC
+    </select>
+
+    <select id="countByChain" resultType="long">
+        SELECT COUNT(*) FROM swap WHERE chain_id = #{chainId}
+    </select>
+</mapper>

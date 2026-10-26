@@ -1,0 +1,294 @@
+openapi: 3.0.3
+info:
+  title: Anchor API
+  version: 0.1.0
+  description: |
+    P1 契约：链列表、地址簿、Swap 查询。
+    金额是最小单位整数的十进制字符串。地址在服务端以小写保存。
+    确认状态本期只会出现 CONFIRMING。
+servers:
+  - url: http://localhost:8080
+paths:
+  /api/v1/chains:
+    get:
+      operationId: listChains
+      summary: 支持的链
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Chain"
+  /api/v1/watch-addresses:
+    get:
+      operationId: listWatchAddresses
+      summary: 地址簿
+      parameters:
+        - $ref: "#/components/parameters/chainId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WatchAddress"
+    post:
+      operationId: createWatchAddress
+      summary: 添加监控地址
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WatchAddressWrite"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WatchAddress"
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/v1/watch-addresses/{id}:
+    put:
+      operationId: updateWatchAddress
+      summary: 修改监控地址
+      parameters:
+        - $ref: "#/components/parameters/id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WatchAddressWrite"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WatchAddress"
+        "404":
+          $ref: "#/components/responses/Error"
+    delete:
+      operationId: deleteWatchAddress
+      summary: 删除监控地址
+      parameters:
+        - $ref: "#/components/parameters/id"
+      responses:
+        "204":
+          description: No Content
+        "404":
+          $ref: "#/components/responses/Error"
+  /api/v1/swaps:
+    get:
+      operationId: listSwaps
+      summary: Swap 分页
+      parameters:
+        - $ref: "#/components/parameters/chainId"
+        - name: address
+          in: query
+          schema:
+            type: string
+          description: 监控地址，小写或校验后按小写匹配
+        - name: dex
+          in: query
+          schema:
+            type: string
+        - name: direction
+          in: query
+          schema:
+            $ref: "#/components/schemas/Direction"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SwapPage"
+components:
+  parameters:
+    chainId:
+      name: chainId
+      in: query
+      required: true
+      schema:
+        type: integer
+        format: int64
+    id:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+  responses:
+    Error:
+      description: 错误
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorBody"
+  schemas:
+    ErrorBody:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+    Chain:
+      type: object
+      required: [key, chainId, name, type, testnet, confirmationBlocks]
+      properties:
+        key:
+          type: string
+        chainId:
+          type: integer
+          format: int64
+        name:
+          type: string
+        type:
+          type: string
+          enum: [EVM, SOLANA]
+        testnet:
+          type: boolean
+        confirmationBlocks:
+          type: integer
+    Direction:
+      type: string
+      enum: [BUY, SELL, SWAP]
+    ConfirmStatus:
+      type: string
+      enum: [CONFIRMING, CONFIRMED, FINALIZED, REORGED]
+    AddressTag:
+      type: string
+      enum: [WATCH, ROUTER, MEV, WHALE, KOL]
+    WatchAddressWrite:
+      type: object
+      required: [chainId, address, tag]
+      properties:
+        chainId:
+          type: integer
+          format: int64
+        address:
+          type: string
+        name:
+          type: string
+        tag:
+          $ref: "#/components/schemas/AddressTag"
+        note:
+          type: string
+    WatchAddress:
+      type: object
+      required: [id, chainId, address, tag, swapCount, createdAt]
+      properties:
+        id:
+          type: string
+        chainId:
+          type: integer
+          format: int64
+        address:
+          type: string
+        name:
+          type: string
+          nullable: true
+        tag:
+          $ref: "#/components/schemas/AddressTag"
+        note:
+          type: string
+          nullable: true
+        swapCount:
+          type: integer
+          format: int64
+        lastActiveAt:
+          type: integer
+          format: int64
+          nullable: true
+          description: 最近一笔 Swap 的区块时间，毫秒
+        createdAt:
+          type: integer
+          format: int64
+          description: 毫秒时间戳
+    TokenAmount:
+      type: object
+      required: [address, amount]
+      properties:
+        address:
+          type: string
+        symbol:
+          type: string
+          nullable: true
+        decimals:
+          type: integer
+          nullable: true
+        amount:
+          type: string
+          description: 最小单位整数
+    Swap:
+      type: object
+      required: [id, chainId, txHash, logIndex, blockNumber, direction, dex, tokenIn, tokenOut, confirmStatus, watchedAddress]
+      properties:
+        id:
+          type: string
+        chainId:
+          type: integer
+          format: int64
+        txHash:
+          type: string
+        logIndex:
+          type: integer
+        blockNumber:
+          type: integer
+          format: int64
+        timestamp:
+          type: integer
+          format: int64
+          description: 区块时间，毫秒
+        direction:
+          $ref: "#/components/schemas/Direction"
+        dex:
+          type: string
+        tokenIn:
+          $ref: "#/components/schemas/TokenAmount"
+        tokenOut:
+          $ref: "#/components/schemas/TokenAmount"
+        confirmStatus:
+          $ref: "#/components/schemas/ConfirmStatus"
+        watchedAddress:
+          type: string
+    SwapPage:
+      type: object
+      required: [items, page, size, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Swap"
+        page:
+          type: integer
+        size:
+          type: integer
+        total:
+          type: integer
+          format: int64

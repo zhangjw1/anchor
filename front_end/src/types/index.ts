@@ -5,9 +5,11 @@ export interface WatchAddress {
   tag: 'WATCH' | 'ROUTER' | 'MEV' | 'WHALE' | 'KOL';
   addedAt: number;
   note?: string;
+  swapCount?: number;
+  lastActiveAt?: number | null;
 }
 
-export type SwapDirection = 'BUY' | 'SELL';
+export type SwapDirection = 'BUY' | 'SELL' | 'SWAP';
 
 export type SwapStatus = 
   | { type: 'reorg'; label: string }
@@ -25,7 +27,7 @@ export interface SwapTransaction {
     isAggregator?: boolean;
     aggregatorLabel?: string;
   };
-  dex: 'Uniswap V3' | '1inch' | 'Aerodrome' | 'Curve' | 'SushiSwap' | 'Maverick';
+  dex: string;
   amount: string; // e.g. "+1.20 WETH" or "+240.5k DEGEN"
   rawAmount: number;
   amountToken: string;

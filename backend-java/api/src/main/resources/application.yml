@@ -1,0 +1,7 @@
+spring:
+  config:
+    import: classpath:anchor-defaults.yml
+  application:
+    name: anchor-api
+server:
+  port: 8080

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.anchor.common.persistence.mapper.CheckpointMapper">
+    <select id="findBlockNumber" resultType="java.lang.Long">
+        SELECT block_number FROM block_checkpoint WHERE chain_id = #{chainId}
+    </select>
+
+    <insert id="advance">
+        INSERT INTO block_checkpoint (chain_id, block_number, block_hash, created_by, updated_by)
+        VALUES (#{chainId}, #{blockNumber}, #{blockHash}, #{actor}, #{actor})
+        ON CONFLICT (chain_id) DO UPDATE SET
+            block_number = EXCLUDED.block_number,
+            block_hash = EXCLUDED.block_hash,
+            updated_by = EXCLUDED.updated_by,
+            updated_at = NOW()
+        WHERE block_checkpoint.block_number &lt; EXCLUDED.block_number
+    </insert>
+</mapper>

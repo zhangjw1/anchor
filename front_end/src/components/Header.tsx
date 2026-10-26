@@ -62,7 +62,7 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Indexer Status */}
         <div className="flex items-center gap-1.5 text-xs text-slate-700 font-medium">
           <span className={`w-2 h-2 rounded-full ${isSyncing ? 'bg-emerald-500 animate-pulse' : 'bg-emerald-500'}`} />
-          <span>Indexer 同步中</span>
+          <span>{isSyncing ? 'Indexer 同步中' : 'Indexer 已暂停'}</span>
         </div>
 
         {/* Network Selector Dropdown */}

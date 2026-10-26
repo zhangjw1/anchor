@@ -1,0 +1,79 @@
+package com.anchor.parser.swap;
+
+import com.anchor.common.chain.RpcGateway;
+import com.anchor.common.domain.AnchorConstants;
+import com.anchor.common.domain.RedisKeys;
+import com.anchor.common.evm.generated.UniswapV3Pool;
+import com.anchor.common.support.Addresses;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.stereotype.Service;
+import org.web3j.abi.FunctionEncoder;
+import org.web3j.abi.FunctionReturnDecoder;
+import org.web3j.abi.TypeReference;
+import org.web3j.abi.datatypes.Address;
+import org.web3j.abi.datatypes.Function;
+import org.web3j.abi.datatypes.Type;
+
+import java.time.Duration;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+
+@Service
+public class RpcPoolFactoryLookup implements PoolFactoryLookup {
+
+    private static final Logger log = LoggerFactory.getLogger(RpcPoolFactoryLookup.class);
+    private static final String CALL_DATA = FunctionEncoder.encode(new Function(
+            UniswapV3Pool.FUNC_FACTORY, List.of(), Arrays.<TypeReference<?>>asList(new TypeReference<Address>() {})));
+
+    private final RpcGateway rpcGateway;
+    private final StringRedisTemplate redis;
+    private final ConcurrentHashMap<String, String> memory = new ConcurrentHashMap<>();
+
+    public RpcPoolFactoryLookup(RpcGateway rpcGateway, StringRedisTemplate redis) {
+        this.rpcGateway = rpcGateway;
+        this.redis = redis;
+    }
+
+    @Override
+    public Optional<String> findFactory(long chainId, String pool) {
+        String key = chainId + ":" + pool;
+        String cached = memory.get(key);
+        if (cached != null) {
+            return Optional.of(cached);
+        }
+        String redisKey = RedisKeys.poolFactory(chainId, pool);
+        String stored = redis.opsForValue().get(redisKey);
+        if (stored != null) {
+            memory.put(key, stored);
+            return Optional.of(stored);
+        }
+        try {
+            String raw = rpcGateway.ethCall(chainId, pool, CALL_DATA);
+            Optional<String> decoded = decodeAddress(raw);
+            decoded.ifPresent(factory -> {
+                memory.put(key, factory);
+                redis.opsForValue().set(redisKey, factory, Duration.ofDays(AnchorConstants.POOL_CACHE_DAYS));
+            });
+            return decoded;
+        } catch (RuntimeException ex) {
+            log.warn("pool factory call failed chainId={} pool={}", chainId, pool);
+            return Optional.empty();
+        }
+    }
+
+    private static Optional<String> decodeAddress(String raw) {
+        if (raw == null || raw.length() < 66) {
+            return Optional.empty();
+        }
+        @SuppressWarnings("rawtypes")
+        List<Type> decoded = FunctionReturnDecoder.decode(raw, AbiOutputs.single(new TypeReference<Address>() {}));
+        if (decoded.isEmpty()) {
+            return Optional.empty();
+        }
+        return Optional.of(Addresses.lower(((Address) decoded.get(0)).getValue()));
+    }
+}

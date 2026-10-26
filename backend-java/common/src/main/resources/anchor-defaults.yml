@@ -1,0 +1,48 @@
+spring:
+  threads:
+    virtual:
+      enabled: true
+  application:
+    name: anchor
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/anchor}
+    username: ${DB_USER:anchor}
+    password: ${DB_PASSWORD:anchor}
+    hikari:
+      connection-init-sql: SET TIME ZONE 'UTC'
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+  flyway:
+    enabled: true
+    locations: ${FLYWAY_LOCATIONS:filesystem:../../db/migrations}
+  jackson:
+    serialization:
+      write-dates-as-timestamps: true
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    banner: false
+    db-config:
+      id-type: auto
+      insert-strategy: not_null
+      update-strategy: not_null
+anchor:
+  chains-file: ${ANCHOR_CHAINS_FILE:../../contracts-shared/chains.yaml}
+  chain-key: ${ANCHOR_CHAIN_KEY:base}
+  scanner:
+    poll-interval-ms: 2000
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+logging:
+  config: classpath:logback-spring.xml

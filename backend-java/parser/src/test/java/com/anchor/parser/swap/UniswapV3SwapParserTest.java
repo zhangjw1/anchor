@@ -8,7 +8,7 @@ import com.anchor.common.chain.ChainRegistry;
 import com.anchor.common.chain.ChainTransaction;
 import com.anchor.common.chain.SwapParser;
 import com.anchor.common.chain.YamlChainRegistry;
-import com.anchor.common.domain.AnchorConstants;
+import com.anchor.common.constant.AnchorConstants;
 import com.anchor.common.support.Addresses;
 import com.anchor.common.support.RepoPaths;
 import com.fasterxml.jackson.databind.JsonNode;

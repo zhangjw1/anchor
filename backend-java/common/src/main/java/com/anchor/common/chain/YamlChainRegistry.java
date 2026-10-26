@@ -1,9 +1,9 @@
 package com.anchor.common.chain;
 
 import com.anchor.common.domain.AnchorException;
-import com.anchor.common.domain.ChainType;
-import com.anchor.common.domain.GasModel;
-import com.anchor.common.domain.SignMode;
+import com.anchor.common.domain.ChainTypeEnum;
+import com.anchor.common.domain.GasModelEnum;
+import com.anchor.common.domain.SignModeEnum;
 import com.anchor.common.support.Addresses;
 import com.anchor.common.support.RepoPaths;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -73,7 +73,7 @@ public class YamlChainRegistry implements ChainRegistry {
     }
 
     private static ChainDefinition toDefinition(ChainFile item) {
-        List<SignMode> modes = item.signModes().stream().map(value -> SignMode.valueOf(value.trim())).toList();
+        List<SignModeEnum> modes = item.signModes().stream().map(value -> SignModeEnum.valueOf(value.trim())).toList();
         Set<String> quotes = new LinkedHashSet<>();
         for (String quote : item.quoteTokens()) {
             quotes.add(Addresses.normalizeEvm(quote));
@@ -89,10 +89,10 @@ public class YamlChainRegistry implements ChainRegistry {
                 item.key(),
                 item.chainId(),
                 item.name(),
-                ChainType.valueOf(item.type().trim().toUpperCase(Locale.ROOT)),
+                ChainTypeEnum.valueOf(item.type().trim().toUpperCase(Locale.ROOT)),
                 item.testnet(),
                 item.confirmationBlocks(),
-                GasModel.valueOf(item.gasModel().trim()),
+                GasModelEnum.valueOf(item.gasModel().trim()),
                 modes,
                 new ChainDefinition.NativeToken(item.nativeToken().symbol(), item.nativeToken().decimals(), Addresses.normalizeEvm(item.nativeToken().address())),
                 item.rpc().stream().map(node -> new ChainDefinition.RpcNode(node.url(), node.requestsPerSecond())).toList(),

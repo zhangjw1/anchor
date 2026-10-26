@@ -1,8 +1,8 @@
 package com.anchor.parser.swap;
 
 import com.anchor.common.chain.RpcGateway;
-import com.anchor.common.domain.AnchorConstants;
-import com.anchor.common.domain.RedisKeys;
+import com.anchor.common.constant.AnchorConstants;
+import com.anchor.common.constant.RedisKeys;
 import com.anchor.common.evm.generated.UniswapV3Pool;
 import com.anchor.common.support.Addresses;
 import org.slf4j.Logger;

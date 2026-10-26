@@ -1,8 +1,8 @@
 package com.anchor.common.chain;
 
-import com.anchor.common.domain.ChainType;
-import com.anchor.common.domain.GasModel;
-import com.anchor.common.domain.SignMode;
+import com.anchor.common.domain.ChainTypeEnum;
+import com.anchor.common.domain.GasModelEnum;
+import com.anchor.common.domain.SignModeEnum;
 
 import java.util.List;
 import java.util.Set;
@@ -11,11 +11,11 @@ public record ChainDefinition(
         String key,
         long chainId,
         String name,
-        ChainType type,
+        ChainTypeEnum type,
         boolean testnet,
         int confirmationBlocks,
-        GasModel gasModel,
-        List<SignMode> signModes,
+        GasModelEnum gasModel,
+        List<SignModeEnum> signModes,
         NativeToken nativeToken,
         List<RpcNode> rpcNodes,
         Contracts contracts,

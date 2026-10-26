@@ -1,22 +1,22 @@
 package com.anchor.parser.swap;
 
 import com.anchor.common.chain.ChainDefinition;
-import com.anchor.common.domain.SwapDirection;
+import com.anchor.common.domain.SwapDirectionEnum;
 
 public final class SwapDirections {
 
     private SwapDirections() {
     }
 
-    public static SwapDirection of(ChainDefinition chain, String tokenIn, String tokenOut) {
+    public static SwapDirectionEnum of(ChainDefinition chain, String tokenIn, String tokenOut) {
         boolean inQuote = chain.quoteTokens().contains(tokenIn);
         boolean outQuote = chain.quoteTokens().contains(tokenOut);
         if (inQuote && !outQuote) {
-            return SwapDirection.BUY;
+            return SwapDirectionEnum.BUY;
         }
         if (!inQuote && outQuote) {
-            return SwapDirection.SELL;
+            return SwapDirectionEnum.SELL;
         }
-        return SwapDirection.SWAP;
+        return SwapDirectionEnum.SWAP;
     }
 }

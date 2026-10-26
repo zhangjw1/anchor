@@ -1,12 +1,12 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
-<mapper namespace="com.anchor.common.persistence.mapper.BlockHashMapper">
-    <select id="findHash" resultType="string">
+<mapper namespace="com.anchor.common.dao.BlockHashMapper">
+    <select id="getHash" resultType="string">
         SELECT block_hash FROM block_hash
         WHERE chain_id = #{chainId} AND block_number = #{blockNumber}
     </select>
 
-    <insert id="upsert">
+    <insert id="save">
         INSERT INTO block_hash (chain_id, block_number, block_hash, parent_hash, created_by, updated_by)
         VALUES (#{chainId}, #{blockNumber}, #{blockHash}, #{parentHash}, #{actor}, #{actor})
         ON CONFLICT (chain_id, block_number) DO UPDATE SET

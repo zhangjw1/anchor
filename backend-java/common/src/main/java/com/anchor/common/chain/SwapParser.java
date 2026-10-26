@@ -1,6 +1,6 @@
 package com.anchor.common.chain;
 
-import com.anchor.common.domain.SwapDirection;
+import com.anchor.common.domain.SwapDirectionEnum;
 
 import java.math.BigInteger;
 import java.util.Optional;
@@ -26,7 +26,7 @@ public interface SwapParser {
             String txFrom,
             String txTo,
             String dex,
-            SwapDirection direction,
+            SwapDirectionEnum direction,
             String tokenIn,
             String tokenOut,
             BigInteger amountIn,

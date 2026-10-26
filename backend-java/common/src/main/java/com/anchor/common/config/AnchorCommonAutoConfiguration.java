@@ -4,8 +4,8 @@ import com.anchor.common.chain.AnchorSettings;
 import com.anchor.common.chain.ChainRegistry;
 import com.anchor.common.chain.RpcGateway;
 import com.anchor.common.chain.YamlChainRegistry;
-import com.anchor.common.persistence.typehandler.BigIntegerNumericTypeHandler;
-import com.anchor.common.rpc.FailoverRpcGateway;
+import com.anchor.common.handler.BigIntegerNumericTypeHandler;
+import com.anchor.common.manager.FailoverRpcGateway;
 import com.baomidou.mybatisplus.annotation.DbType;
 import com.baomidou.mybatisplus.autoconfigure.ConfigurationCustomizer;
 import com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor;
@@ -23,7 +23,7 @@ import java.math.BigInteger;
 
 @AutoConfiguration
 @EnableConfigurationProperties(AnchorSettings.class)
-@MapperScan("com.anchor.common.persistence.mapper")
+@MapperScan("com.anchor.common.dao")
 public class AnchorCommonAutoConfiguration {
 
     @Bean

@@ -5,7 +5,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 import java.util.Map;
 
-@SpringBootApplication(scanBasePackages = {"com.anchor.indexer", "com.anchor.parser.swap"})
+@SpringBootApplication(scanBasePackages = {"com.anchor.indexer", "com.anchor.parser.swap", "com.anchor.parser.service"})
 public class IndexerApplication {
 
     public static void main(String[] args) {

@@ -9,11 +9,12 @@ import com.anchor.common.chain.ChainScanner;
 import com.anchor.common.chain.ChainTransaction;
 import com.anchor.common.chain.RpcGateway;
 import com.anchor.common.chain.SwapParser;
-import com.anchor.common.domain.AnchorConstants;
-import com.anchor.common.domain.RedisKeys;
-import com.anchor.common.persistence.mapper.BlockHashMapper;
-import com.anchor.common.persistence.mapper.CheckpointMapper;
-import com.anchor.parser.swap.TokenMetadataService;
+import com.anchor.common.constant.AnchorConstants;
+import com.anchor.common.constant.RedisKeys;
+import com.anchor.common.dao.BlockHashMapper;
+import com.anchor.common.dao.CheckpointMapper;
+import com.anchor.indexer.service.BlockIngestionService;
+import com.anchor.parser.service.TokenMetadataService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -64,7 +65,7 @@ public class BlockScanner implements ChainScanner {
     @Override
     public void scanForever() {
         ChainDefinition chain = chainRegistry.requireByKey(settings.getChainKey());
-        Long stored = checkpointMapper.findBlockNumber(chain.chainId());
+        Long stored = checkpointMapper.getBlockNumber(chain.chainId());
         long next = stored == null ? -1L : stored + 1;
         log.info("scanner loop chainId={} checkpoint={}", chain.chainId(), stored);
         while (!paused.get()) {
@@ -117,7 +118,7 @@ public class BlockScanner implements ChainScanner {
     }
 
     private boolean parentMismatch(long chainId, ChainBlock block) {
-        String stored = blockHashMapper.findHash(chainId, block.number() - 1);
+        String stored = blockHashMapper.getHash(chainId, block.number() - 1);
         return stored != null && !stored.equalsIgnoreCase(block.parentHash());
     }
 

@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
-<mapper namespace="com.anchor.common.persistence.mapper.TokenMapper">
-    <select id="findOne" resultType="com.anchor.common.persistence.entity.TokenEntity">
+<mapper namespace="com.anchor.common.dao.TokenMapper">
+    <select id="getByChainAndAddress" resultType="com.anchor.common.dataobject.TokenDO">
         SELECT chain_id, address, symbol, decimals, created_by, created_at, updated_by, updated_at
         FROM token
         WHERE chain_id = #{chainId} AND address = #{address}
     </select>
 
-    <insert id="upsert">
+    <insert id="save">
         INSERT INTO token (chain_id, address, symbol, decimals, created_by, updated_by)
         VALUES (#{chainId}, #{address}, #{symbol}, #{decimals}, #{createdBy}, #{updatedBy})
         ON CONFLICT (chain_id, address) DO UPDATE SET

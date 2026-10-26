@@ -4,7 +4,7 @@ import com.anchor.common.chain.ChainLog;
 import com.anchor.common.chain.ChainReceipt;
 import com.anchor.common.chain.ChainTransaction;
 import com.anchor.common.chain.SwapParser;
-import com.anchor.common.domain.AnchorConstants;
+import com.anchor.common.constant.AnchorConstants;
 import com.anchor.common.evm.generated.Erc20;
 import com.anchor.common.evm.generated.UniswapV3Pool;
 import com.anchor.common.evm.generated.Weth9;

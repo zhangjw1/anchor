@@ -126,46 +126,105 @@ public class YamlChainRegistry implements ChainRegistry {
         return raw == null || raw.isBlank() ? null : Addresses.normalizeEvm(raw);
     }
 
-    public record ChainsFile(List<ChainFile> chains) {
+    /**
+     * chains.yaml 根节点。
+     */
+    public record ChainsFile(
+            /** 链定义列表，对应 yaml 的 chains。 */
+            List<ChainFile> chains) {
     }
 
+    /**
+     * chains.yaml 中一条链的原始字段。
+     */
     public record ChainFile(
+            /** 链标识，例如 base。 */
             String key,
+            /** 链 ID。 */
             long chainId,
+            /** 链显示名称。 */
             String name,
+            /** 链类型字符串，例如 EVM。 */
             String type,
+            /** 是否测试网。 */
             boolean testnet,
+            /** 达到已确认所需的区块数。 */
             int confirmationBlocks,
+            /** 手续费模型字符串，例如 EIP1559_OP_L1_FEE。 */
             String gasModel,
+            /** 签名模式字符串列表，例如 CLIENT、HOT_WALLET。 */
             List<String> signModes,
+            /** 原生币配置。 */
             NativeTokenFile nativeToken,
+            /** RPC 节点列表。 */
             List<RpcFile> rpc,
+            /** 合约地址集合。 */
             ContractsFile contracts,
+            /** 报价币地址列表。 */
             List<String> quoteTokens,
+            /** 聚合器列表。 */
             List<AggregatorFile> aggregators) {
 
-        public record NativeTokenFile(String symbol, int decimals, String address) {
+        /**
+         * 对应 yaml 的 nativeToken。
+         */
+        public record NativeTokenFile(
+                /** 原生币符号。 */
+                String symbol,
+                /** 原生币精度。 */
+                int decimals,
+                /** 原生币占位地址。 */
+                String address) {
         }
 
-        public record RpcFile(String url, double requestsPerSecond) {
+        /**
+         * 对应 yaml 的 rpc 列表项。
+         */
+        public record RpcFile(
+                /** 节点 URL。 */
+                String url,
+                /** 每秒请求上限。 */
+                double requestsPerSecond) {
         }
 
+        /**
+         * 对应 yaml 的 contracts。
+         */
         public record ContractsFile(
+                /** WETH。 */
                 String weth,
+                /** USDC。 */
                 String usdc,
+                /** USDbC。 */
                 String usdbc,
+                /** Multicall3。 */
                 String multicall3,
+                /** OP 栈 GasPriceOracle。 */
                 String gasPriceOracle,
+                /** Uniswap V3 Factory。 */
                 String uniswapV3Factory,
+                /** Uniswap QuoterV2。 */
                 String quoterV2,
+                /** Uniswap SwapRouter02。 */
                 String swapRouter02,
+                /** Uniswap V2 Factory。 */
                 String uniswapV2Factory,
+                /** Uniswap V2 Router。 */
                 String uniswapV2Router,
+                /** Aerodrome Router。 */
                 String aerodromeRouter,
+                /** Aerodrome Factory。 */
                 String aerodromeFactory) {
         }
     }
 
-    public record AggregatorFile(String name, String address) {
+    /**
+     * 对应 yaml 的 aggregators 列表项。
+     */
+    public record AggregatorFile(
+            /** 聚合器名称。 */
+            String name,
+            /** 聚合器路由地址。 */
+            String address) {
     }
 }

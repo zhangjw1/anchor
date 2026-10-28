@@ -5,7 +5,7 @@ import com.anchor.common.chain.RpcGateway;
 import com.anchor.common.constant.AnchorConstants;
 import com.anchor.common.constant.RedisKeys;
 import com.anchor.common.dao.TokenMapper;
-import com.anchor.common.dataobject.TokenDO;
+import com.anchor.common.entity.TokenDO;
 import com.anchor.common.evm.generated.Erc20;
 import com.anchor.common.support.Addresses;
 import com.anchor.parser.service.TokenMetadataService;

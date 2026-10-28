@@ -7,7 +7,7 @@ import com.anchor.common.constant.AnchorConstants;
 import com.anchor.common.dao.BlockHashMapper;
 import com.anchor.common.dao.CheckpointMapper;
 import com.anchor.common.dao.SwapMapper;
-import com.anchor.common.dataobject.SwapDO;
+import com.anchor.common.entity.SwapDO;
 import com.anchor.common.domain.ConfirmStatusEnum;
 import com.anchor.common.dto.ChainEventDTO;
 import com.anchor.indexer.service.BlockIngestionService;

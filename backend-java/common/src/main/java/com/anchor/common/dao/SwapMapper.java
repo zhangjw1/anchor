@@ -1,6 +1,6 @@
 package com.anchor.common.dao;
 
-import com.anchor.common.dataobject.SwapDO;
+import com.anchor.common.entity.SwapDO;
 import com.anchor.common.dto.SwapDTO;
 import com.anchor.common.query.SwapQuery;
 import com.baomidou.mybatisplus.core.metadata.IPage;

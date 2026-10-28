@@ -6,7 +6,7 @@ import com.anchor.common.chain.ChainRegistry;
 import com.anchor.common.constant.AnchorConstants;
 import com.anchor.common.constant.RedisKeys;
 import com.anchor.common.dao.WatchAddressMapper;
-import com.anchor.common.dataobject.WatchAddressDO;
+import com.anchor.common.entity.WatchAddressDO;
 import com.anchor.common.domain.AddressTagEnum;
 import com.anchor.common.domain.AnchorException;
 import com.anchor.common.domain.ChainTypeEnum;

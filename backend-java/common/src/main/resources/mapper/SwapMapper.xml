@@ -80,7 +80,7 @@
         SELECT COUNT(*) FROM swap WHERE chain_id = #{chainId}
     </select>
 
-    <select id="listActive" resultType="com.anchor.common.dataobject.SwapDO">
+    <select id="listActive" resultType="com.anchor.common.entity.SwapDO">
         SELECT chain_id, tx_hash, log_index, block_number, confirm_status, watched_address
         FROM swap
         WHERE chain_id = #{chainId}

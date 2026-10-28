@@ -1,40 +1,56 @@
-package com.anchor.common.dataobject;
+package com.anchor.common.entity;
 
-import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableId;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableName;
 
 import java.time.LocalDateTime;
 
 /**
- * watched_address 表的一行。
+ * token 表的一行。同一条链上地址唯一。
  */
-@TableName("watched_address")
-public class WatchAddressDO {
-    @TableId(type = IdType.AUTO)
-    private Long id;
+@TableName("token")
+public class TokenDO {
+
+    /** 链 ID */
+    @TableField("chain_id")
     private Long chainId;
+
+    /** 代币合约地址；原生币用 0xeeee… 占位 */
+    @TableField("address")
     private String address;
-    private String name;
-    private String tag;
-    private String note;
+
+    /** 代币符号，例如 USDC */
+    @TableField("symbol")
+    private String symbol;
+
+    /** 代币精度 */
+    @TableField("decimals")
+    private Integer decimals;
+
+    /** 创建人 */
+    @TableField("created_by")
     private String createdBy;
+
+    /** 创建时间 */
+    @TableField("created_at")
     private LocalDateTime createdAt;
+
+    /** 更新人 */
+    @TableField("updated_by")
     private String updatedBy;
+
+    /** 更新时间 */
+    @TableField("updated_at")
     private LocalDateTime updatedAt;
 
-    public Long getId() { return id; }
-    public void setId(Long id) { this.id = id; }
     public Long getChainId() { return chainId; }
     public void setChainId(Long chainId) { this.chainId = chainId; }
     public String getAddress() { return address; }
     public void setAddress(String address) { this.address = address; }
-    public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
-    public String getTag() { return tag; }
-    public void setTag(String tag) { this.tag = tag; }
-    public String getNote() { return note; }
-    public void setNote(String note) { this.note = note; }
+    public String getSymbol() { return symbol; }
+    public void setSymbol(String symbol) { this.symbol = symbol; }
+    public Integer getDecimals() { return decimals; }
+    public void setDecimals(Integer decimals) { this.decimals = decimals; }
     public String getCreatedBy() { return createdBy; }
     public void setCreatedBy(String createdBy) { this.createdBy = createdBy; }
     public LocalDateTime getCreatedAt() { return createdAt; }

@@ -40,6 +40,7 @@ public class AnchorSettings {
      */
     public static class Scanner {
         private boolean enabled;
+        // 轮询间隔，单位毫秒
         private long pollIntervalMs = 2000L;
 
         public boolean isEnabled() {

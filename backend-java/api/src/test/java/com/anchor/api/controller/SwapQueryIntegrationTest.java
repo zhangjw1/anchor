@@ -3,7 +3,7 @@ package com.anchor.api.controller;
 import com.anchor.api.bootstrap.ApiApplication;
 import com.anchor.common.constant.AnchorConstants;
 import com.anchor.common.domain.ConfirmStatusEnum;
-import com.anchor.common.dataobject.SwapDO;
+import com.anchor.common.entity.SwapDO;
 import com.anchor.common.dao.SwapMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

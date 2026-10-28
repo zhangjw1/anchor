@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.anchor.common.dao.TokenMapper">
-    <select id="getByChainAndAddress" resultType="com.anchor.common.dataobject.TokenDO">
+    <select id="getByChainAndAddress" resultType="com.anchor.common.entity.TokenDO">
         SELECT chain_id, address, symbol, decimals, created_by, created_at, updated_by, updated_at
         FROM token
         WHERE chain_id = #{chainId} AND address = #{address}

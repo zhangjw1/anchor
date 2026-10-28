@@ -118,6 +118,7 @@ public class BlockScanner implements ChainScanner {
         MDC.put("chainId", String.valueOf(chain.chainId()));
         MDC.put("blockNumber", String.valueOf(block.number()));
         try {
+            // 发现链上父区块与已经扫描入库的上一个区块不一致，尝试重组
             if (parentMismatch(chain.chainId(), block)) {
                 ReorgHandleDTO outcome = reorgService.handle(chain, block);
                 if (outcome.paused()) {
@@ -127,14 +128,18 @@ public class BlockScanner implements ChainScanner {
                 }
                 return ScanStepDTO.rewound(outcome.nextBlock());
             }
+            // 获取区块里匹配的监控地址的交易，解析交换事件
             List<SwapParser.ParsedSwap> swaps = parseMatched(chain, block);
+            //记录所有在区块里出现的币种信息
             for (SwapParser.ParsedSwap swap : swaps) {
                 tokenMetadataService.ensure(chain, swap.tokenIn());
                 tokenMetadataService.ensure(chain, swap.tokenOut());
             }
+            // 获取执行层/共识层 确认的最新区块高度(这个高度之前的区块永远不会再被重组)
             long finalized = rpcGateway.finalizedBlockNumber(chain.chainId());
+            // 将区块数据和swap交易数据入库
             BlockIngestDTO ingested = ingestionService.persist(chain, block, swaps, finalized);
-            // 发送成功后才推进 checkpoint，失败时外层按同一块重试
+            // 区块里找到的交易信息通过kafka推送前端
             publisher.publishSwaps(ingested.swaps().stream().map(SwapEventDTO::from).toList());
             publisher.publishChain(ingested.confirmations());
             ingestionService.advanceCheckpoint(chain.chainId(), block.number(), block.hash());
@@ -174,6 +179,7 @@ public class BlockScanner implements ChainScanner {
                 continue;
             }
             MDC.put("txHash", tx.hash());
+            //解析交易里的swap事件
             swapParser.parse(new SwapParser.SwapParseContext(chain, block, tx, receipt)).ifPresent(swaps::add);
         }
         return swaps;

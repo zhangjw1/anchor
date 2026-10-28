@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>区块链重组与 ReorgServiceImpl.locate</title>
+  <style>
+    :root {
+      --bg: #f7f7f5;
+      --panel: #ffffff;
+      --text: #1a1a1a;
+      --text-2: #5c5c5c;
+      --text-3: #8a8a8a;
+      --border: #e5e5e2;
+      --fill: #f0f0ed;
+      --accent: #2563eb;
+      --old: #c06028;
+      --new: #2e79b5;
+      --green: #1f8a65;
+      --red: #c04848;
+      --ok-bg: #e8f6ef;
+      --bad-bg: #fceaea;
+      --info-bg: #eef4ff;
+      --warn-bg: #fff6e5;
+      --success-bg: #e8f6ef;
+      --danger-bg: #fceaea;
+      --neutral-bg: #f0f0ed;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #1e1e1e;
+        --panel: #252526;
+        --text: #e8e8e8;
+        --text-2: #b0b0b0;
+        --text-3: #808080;
+        --border: #3c3c3c;
+        --fill: #2d2d2d;
+        --accent: #4d8dff;
+        --ok-bg: #1a3328;
+        --bad-bg: #3a2222;
+        --info-bg: #1e2a3d;
+        --warn-bg: #3a3020;
+        --success-bg: #1a3328;
+        --danger-bg: #3a2222;
+        --neutral-bg: #2d2d2d;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.55;
+    }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 24px 20px 48px; }
+    h1 { font-size: 24px; margin: 0 0 8px; font-weight: 650; }
+    .subtitle { color: var(--text-2); margin: 0 0 20px; font-size: 14px; }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+    .spacer { flex: 1; }
+    button {
+      height: 32px;
+      padding: 0 14px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--text);
+      cursor: pointer;
+      font-size: 13px;
+    }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+    button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+    button.ghost { background: transparent; }
+    .pill {
+      height: 26px;
+      padding: 0 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--text-2);
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .pill.active { background: var(--text); color: var(--bg); border-color: var(--text); }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin: 16px 0;
+    }
+    .stat {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 14px;
+    }
+    .stat .label { font-size: 12px; color: var(--text-3); }
+    .stat .value { font-size: 20px; font-weight: 650; margin-top: 4px; }
+    .stat.success .value { color: var(--green); }
+    .stat.danger .value { color: var(--red); }
+    .stat.info .value { color: var(--new); }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      margin-bottom: 16px;
+      overflow: hidden;
+    }
+    .card-h {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: baseline;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      font-weight: 600;
+      font-size: 15px;
+    }
+    .card-h .trail { font-weight: 400; font-size: 12px; color: var(--text-3); }
+    .card-b { padding: 16px; }
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      margin-top: 12px;
+      font-size: 12px;
+      color: var(--text-2);
+    }
+    .legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .grid2 {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr);
+      gap: 16px;
+      align-items: start;
+    }
+    @media (max-width: 900px) {
+      .stats { grid-template-columns: 1fr 1fr; }
+      .grid2 { grid-template-columns: 1fr; }
+    }
+    h3 { margin: 0 0 8px; font-size: 15px; }
+    .body { font-size: 14px; color: var(--text); margin-bottom: 12px; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      margin: 8px 0 12px;
+    }
+    th, td {
+      text-align: left;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    th { color: var(--text-3); font-weight: 500; }
+    tr.danger td { color: var(--red); }
+    .callout {
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 13px;
+      margin: 8px 0;
+      border: 1px solid var(--border);
+    }
+    .callout.info { background: var(--info-bg); }
+    .callout.warning { background: var(--warn-bg); }
+    .callout.success { background: var(--success-bg); }
+    .callout.danger { background: var(--danger-bg); }
+    .callout.neutral { background: var(--neutral-bg); }
+    .code {
+      font-family: ui-monospace, Consolas, "Courier New", monospace;
+      font-size: 12px;
+      line-height: 20px;
+      overflow-x: auto;
+    }
+    .code .line {
+      white-space: pre;
+      padding: 0 8px;
+      border-left: 3px solid transparent;
+      color: var(--text-3);
+    }
+    .code .line.hl {
+      border-left-color: var(--accent);
+      background: var(--fill);
+      color: var(--text);
+    }
+    .muted { color: var(--text-3); font-size: 12px; }
+    .svg-wrap { overflow-x: auto; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>区块链重组与 ReorgServiceImpl.locate</h1>
+    <p class="subtitle">
+      示例：索引器已在旧链上把 103、104 入库（checkpoint = 104），之后网络从 102 分叉并切到新链。
+      扫描器取 105 时发现父哈希对不上，locate 沿新链往回找，直到找到本地与新链相同的块 102。
+    </p>
+
+    <div class="row">
+      <button id="btnPrev" type="button">上一步</button>
+      <button id="btnNext" class="primary" type="button">下一步</button>
+      <button id="btnPlay" class="ghost" type="button">自动播放</button>
+      <div class="spacer"></div>
+      <span class="muted" id="stepMeta"></span>
+    </div>
+    <div class="row" id="pills"></div>
+    <div class="stats" id="stats"></div>
+    <div class="card">
+      <div class="card-h"><span id="cardTitle"></span><span class="trail" id="cardTrail"></span></div>
+      <div class="card-b">
+        <div class="svg-wrap" id="diagram"></div>
+        <div class="legend">
+          <span><svg width="22" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="var(--old)" stroke-width="2"/></svg>旧分叉</span>
+          <span><svg width="22" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="var(--new)" stroke-width="2"/></svg>新分叉</span>
+          <span><svg width="22" height="8"><line x1="0" y1="4" x2="22" y2="4" stroke="var(--text-3)" stroke-width="2" stroke-dasharray="4 3"/></svg>虚线 = 网络已抛弃的孤块</span>
+          <span><svg width="10" height="10"><circle cx="5" cy="5" r="4" fill="var(--green)"/></svg>本地有记录且在主链上</span>
+          <span><svg width="10" height="10"><circle cx="5" cy="5" r="4" fill="var(--red)"/></svg>本地有记录但已是孤块</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div>
+        <h3>这一步发生了什么</h3>
+        <div class="body" id="body"></div>
+        <div id="vars"></div>
+        <div id="note"></div>
+      </div>
+      <div>
+        <div id="codeCard"></div>
+        <div class="card">
+          <div class="card-h"><span>本地 block_hash 表</span><span class="trail" id="dbTrail"></span></div>
+          <div class="card-b" id="dbTable"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="callout neutral">
+      为什么 parentHash 要靠 RPC 一层层取：本地只存了旧链的哈希，新链每个高度上是哪个块，只有节点知道。
+      locate 用「本地 stored」对比「新链在同一高度的哈希」，第一个相等的高度就是共同祖先；它之后的本地数据全部作废。
+    </div>
+  </div>
+
+<script>
+const NODES = [
+  { id: "A100", height: 100, lane: "shared" },
+  { id: "B101", height: 101, lane: "shared", parent: "A100" },
+  { id: "C102", height: 102, lane: "shared", parent: "B101" },
+  { id: "D103", height: 103, lane: "old", parent: "C102" },
+  { id: "E104", height: 104, lane: "old", parent: "D103" },
+  { id: "X103", height: 103, lane: "new", parent: "C102" },
+  { id: "Y104", height: 104, lane: "new", parent: "X103" },
+  { id: "Z105", height: 105, lane: "new", parent: "Y104" },
+];
+const NODE_MAP = Object.fromEntries(NODES.map((n) => [n.id, n]));
+const BASE = ["A100", "B101", "C102"];
+const OLD_CHAIN = [...BASE, "D103", "E104"];
+const NEW_CHAIN = [...BASE, "X103", "Y104", "Z105"];
+const ALL = [...OLD_CHAIN, "X103", "Y104", "Z105"];
+const ORPHANS = ["D103", "E104"];
+
+const LOCATE_CODE = [
+  "Long checkpoint = checkpointMapper.getBlockNumber(chainId);   // 104",
+  "if (checkpoint == null) return Optional.empty();",
+  "long minKeep = Math.max(0L, checkpoint - 64 + 1);             // 41",
+  "long candidate = incoming.number() - 1;                       // 105 - 1 = 104",
+  "String parentHash = incoming.parentHash();                    // Z105.parent = Y104",
+  "while (candidate >= minKeep) {",
+  "    String stored = blockHashMapper.getHash(chainId, candidate);",
+  "    if (stored == null) return Optional.empty();",
+  "    if (stored.equalsIgnoreCase(parentHash)) {",
+  "        int depth = (int) (checkpoint - candidate);",
+  "        if (depth <= 0) return Optional.empty();",
+  "        return Optional.of(new ReorgPlan(chainId, candidate, stored, depth, candidate + 1, checkpoint));",
+  "    }",
+  "    parentHash = rpcGateway.getBlock(chainId, candidate).parentHash();",
+  "    candidate--;",
+  "}",
+  "return Optional.empty();",
+];
+const locate = (highlight) => ({ title: "ReorgServiceImpl.locate", lines: LOCATE_CODE, highlight });
+
+const STAGES = [
+  {
+    short: "1 正常扫描", phase: "背景",
+    title: "旧链正常出块，索引器扫到 104",
+    body: "此时网络上只有一条链 A100 → B101 → C102 → D103 → E104。扫描器逐块处理，每处理完一块就把 (高度, 哈希, 父哈希) 写进 block_hash，并推进 checkpoint。到这一步本地已入库 100~104，checkpoint = 104，D103、E104 里属于监听地址的 swap 也已写入 swap 表。",
+    produced: OLD_CHAIN, orphan: [], ingested: OLD_CHAIN, checkpoint: "E104",
+    canonical: "…C102 → D103 → E104", focus: ["D103", "E104"], focusLabel: "已入库",
+    note: { tone: "info", text: "这一阶段没有 locate 相关代码在执行，本地视图与网络一致。" },
+  },
+  {
+    short: "2 出现竞争块", phase: "背景",
+    title: "另一个出块者也在 102 之上出了块 X103",
+    body: "由于网络延迟或出块者竞争，有节点基于同一个父块 C102 打包出了另一个 103（X103）。现在高度 103 上有两个候选块，网络暂时还没决定哪条是主链。索引器只按 checkpoint 往后扫，对此毫无感知。",
+    produced: [...OLD_CHAIN, "X103"], orphan: [], ingested: OLD_CHAIN, checkpoint: "E104",
+    canonical: "…C102 → D103 → E104（X103 在竞争）", focus: ["X103"], focusLabel: "分叉点之后的新块",
+  },
+  {
+    short: "3 网络切链", phase: "背景",
+    title: "新分叉变长，网络切换主链，D103 / E104 被抛弃",
+    body: "新分叉继续出块 Y104、Z105，比旧分叉更长（PoS 链上则是获得了更多投票），节点按分叉选择规则切到新分叉。旧分叉上的 D103、E104 成了孤块：链上不再承认它们，里面的交易要么作废，要么被重新打包进新块。但本地 block_hash 和 swap 表里仍然保存着 D103、E104 的数据——本地视图已经过期。",
+    produced: ALL, orphan: ORPHANS, ingested: OLD_CHAIN, checkpoint: "E104",
+    canonical: "…C102 → X103 → Y104 → Z105", focus: ["D103", "E104"], focusLabel: "本地仍保留的孤块",
+    note: { tone: "warning", text: "这就是区块链重组（reorg）：一段已经被看到过的块被另一段替换。索引器要做的是发现它、找到分叉点、撤销旧数据、重扫新数据。" },
+  },
+  {
+    short: "4 发现父哈希不一致", phase: "发现",
+    title: "扫描器取 105，发现父哈希对不上",
+    body: "扫描器继续工作：next = checkpoint + 1 = 105。RPC 返回的是新主链上的 Z105，它的 parentHash = Y104。parentMismatch 把它和本地 block_hash[104] = E104 比较，不相等，说明本地 104 已不在主链上，于是不入库 Z105，转而调用 reorgService.handle → locate。",
+    produced: ALL, orphan: ORPHANS, ingested: OLD_CHAIN, checkpoint: "E104",
+    canonical: "…C102 → X103 → Y104 → Z105", focus: ["Z105"], focusLabel: "getBlock(105)",
+    compare: { local: "E104", expected: "Y104", match: false },
+    code: {
+      title: "BlockScanner.process（简化）",
+      lines: [
+        "long next = checkpoint + 1;                              // 105",
+        "ChainBlock block = rpcGateway.getBlock(chainId, next);   // Z105, parentHash = Y104",
+        "String local = blockHashMapper.getHash(chainId, next - 1); // E104",
+        "if (!local.equalsIgnoreCase(block.parentHash())) {        // E104 != Y104",
+        "    ReorgHandleDTO r = reorgService.handle(chain, block);",
+        "    return r.paused() ? ScanStepDTO.paused() : ScanStepDTO.rewound(r.next());",
+        "}",
+      ],
+      highlight: [3, 4],
+    },
+  },
+  {
+    short: "5 locate 初始化", phase: "locate",
+    title: "locate 初始化：从 104 开始往回找",
+    body: "读取 checkpoint = 104。minKeep = 104 - 64 + 1 = 41，是本地 block_hash 最多保留的回溯下限，回溯越过它就放弃并暂停扫描。candidate 从 incoming.number - 1 = 104 开始，parentHash 取 Z105 的父哈希 Y104——它代表「新主链在高度 104 上的块」。",
+    produced: ALL, orphan: ORPHANS, ingested: OLD_CHAIN, checkpoint: "E104",
+    canonical: "…C102 → X103 → Y104 → Z105", focus: ["Y104"], focusLabel: "parentHash",
+    vars: { candidate: "104", parentHash: "Y104", stored: "—", result: "—" },
+    code: locate([0, 2, 3, 4]),
+  },
+  {
+    short: "6 比较 104", phase: "locate",
+    title: "比较高度 104：本地 E104 ≠ 新链 Y104",
+    body: "stored = block_hash[104] = E104，parentHash = Y104，不相等。说明高度 104 不是共同祖先，需要继续往下一层找。",
+    produced: ALL, orphan: ORPHANS, ingested: OLD_CHAIN, checkpoint: "E104",
+    canonical: "…C102 → X103 → Y104 → Z105", focus: [],
+    compare: { local: "E104", expected: "Y104", match: false },
+    vars: { candidate: "104", parentHash: "Y104", stored: "E104", result: "不相等" },
+    code: locate([6, 8]),
+  },
+  {
+    short: "7 RPC 取 104 父哈希", phase: "locate",
+    title: "向 RPC 要新链 104 的父哈希",
+    body: "本地只知道旧链的哈希，新链的上一块是谁只能问节点：getBlock(104) 返回 Y104，它的 parentHash = X103。candidate 减到 103。",
+    produced: ALL, orphan: ORPHANS, ingested: OLD_CHAIN, checkpoint: "E104",
+    canonical: "…C102 → X103 → Y104 → Z105", focus: ["Y104", "X103"], focusLabel: "getBlock(104).parentHash",
+    vars: { candidate: "104 → 103", parentHash: "Y104 → X103", stored: "E104", result: "继续回溯" },
+    code: locate([13, 14]),
+  },
+  {
+    short: "8 比较 103", phase: "locate",
+    title: "比较高度 103：本地 D103 ≠ 新链 X103",
+    body: "stored = block_hash[103] = D103，parentHash = X103，仍不相等。高度 103 也已经分叉。",
+    produced: ALL, orphan: ORPHANS, ingested: OLD_CHAIN, checkpoint: "E104",
+    canonical: "…C102 → X103 → Y104 → Z105", focus: [],
+    compare: { local: "D103", expected: "X103", match: false },
+    vars: { candidate: "103", parentHash: "X103", stored: "D103", result: "不相等" },
+    code: locate([6, 8]),
+  },
+  {
+    short: "9 RPC 取 103 父哈希", phase: "locate",
+    title: "向 RPC 要新链 103 的父哈希",
+    body: "getBlock(103) 返回 X103，它的 parentHash = C102。candidate 减到 102。",
+    produced: ALL, orphan: ORPHANS, ingested: OLD_CHAIN, checkpoint: "E104",
+    canonical: "…C102 → X103 → Y104 → Z105", focus: ["X103", "C102"], focusLabel: "getBlock(103).parentHash",
+    vars: { candidate: "103 → 102", parentHash: "X103 → C102", stored: "D103", result: "继续回溯" },
+    code: locate([13, 14]),
+  },
+  {
+    short: "10 找到共同祖先", phase: "locate",
+    title: "比较高度 102：C102 = C102，找到共同祖先",
+    body: "stored = block_hash[102] = C102，与 parentHash 相等：102 是新旧两条链最后一个相同的块。depth = checkpoint - candidate = 104 - 102 = 2，需要作废的区间是 [103, 104]。返回 ReorgPlan(ancestorBlock=102, ancestorHash=C102, depth=2, fromBlock=103, toBlock=104)。",
+    produced: ALL, orphan: ORPHANS, ingested: OLD_CHAIN, checkpoint: "E104",
+    canonical: "…C102 → X103 → Y104 → Z105", focus: [],
+    compare: { local: "C102", expected: "C102", match: true },
+    vars: { candidate: "102", parentHash: "C102", stored: "C102", result: "ReorgPlan(102, C102, depth=2, 103~104)" },
+    code: locate([8, 9, 11]),
+    note: { tone: "info", text: "locate 返回 empty 的几种情况：没有 checkpoint；本地缺某个高度的哈希；回溯越过 minKeep；RPC 失败。此时 handle 返回 paused，扫描器暂停，等人工介入，而不是盲目回滚。" },
+  },
+  {
+    short: "11 回滚", phase: "回滚",
+    title: "ReorgManager.apply：一个事务内撤销 103~104",
+    body: "handle 拿到计划后调用 apply：swap 表中 102 之后的记录标记为 REORGED（保留数据便于审计，查询时被过滤）；block_hash 删除 102 之后的行（D103、E104）；checkpoint 回退到 102 / C102。三步在同一事务里，任何一步失败整体回滚。随后发布 REORG 事件（depth=2, from=103, to=104）通知下游，返回 rewound(103)。",
+    produced: ALL, orphan: ORPHANS, ingested: BASE, checkpoint: "C102",
+    canonical: "…C102 → X103 → Y104 → Z105", focus: ["C102"], focusLabel: "checkpoint 回退到这里",
+    code: {
+      title: "ReorgServiceImpl.handle / ReorgManager.apply",
+      lines: [
+        "@Transactional(rollbackFor = Exception.class)",
+        'apply(chainId, 102, "C102") {',
+        "    swapMapper.markReorgedAfter(chainId, 102, REORGED);   // 103~104 的 swap",
+        "    blockHashMapper.deleteAfter(chainId, 102);            // 删除 D103、E104",
+        '    checkpointMapper.rewind(chainId, 102, "C102");        // 104 → 102',
+        "}",
+        "publishUntilAck(REORG, depth = 2, from = 103, to = 104);",
+        "return ReorgHandleDTO.rewound(103);",
+      ],
+      highlight: [2, 3, 4, 6, 7],
+    },
+  },
+  {
+    short: "12 重扫新链", phase: "重扫",
+    title: "从 103 开始沿新主链重扫",
+    body: "扫描器从 next = 103 继续：X103 的父哈希 C102 与本地 102 一致，正常入库；Y104、Z105 同理。新链上属于监听地址的 swap 被解析写入，checkpoint 推进到 105。本地视图重新与网络主链一致。",
+    produced: ALL, orphan: ORPHANS, ingested: NEW_CHAIN, checkpoint: "Z105",
+    canonical: "…C102 → X103 → Y104 → Z105", focus: ["X103", "Y104", "Z105"], focusLabel: "重新入库",
+    code: {
+      title: "BlockScanner（重扫）",
+      lines: [
+        "getBlock(103) = X103, parent C102 == block_hash[102]   // 入库",
+        "getBlock(104) = Y104, parent X103 == block_hash[103]   // 入库",
+        "getBlock(105) = Z105, parent Y104 == block_hash[104]   // 入库",
+        "checkpoint = 105 / Z105",
+      ],
+      highlight: [0, 1, 2, 3],
+    },
+    note: { tone: "success", text: "整个过程：发现（父哈希不一致）→ 定位（locate 找共同祖先）→ 回滚（apply）→ 通知（REORG 事件）→ 重扫。" },
+  },
+];
+
+const VIEW_W = 840, VIEW_H = 350, NODE_W = 96, NODE_H = 46;
+const LANE_Y = { old: 95, shared: 190, new: 285 };
+const AUTO_PLAY_MS = 2600;
+const nodeX = (h) => 70 + (h - 100) * 140;
+const laneColor = (lane) => (lane === "old" ? "var(--old)" : lane === "new" ? "var(--new)" : "var(--text-3)");
+
+let index = 0;
+let playing = false;
+let timer = null;
+
+function esc(s) {
+  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function renderDiagram(stage) {
+  const produced = new Set(stage.produced);
+  const orphan = new Set(stage.orphan);
+  const ingested = new Set(stage.ingested);
+  const focus = new Set(stage.focus);
+  const compared = new Set(stage.compare ? [stage.compare.local, stage.compare.expected] : []);
+  const compareColor = stage.compare ? (stage.compare.match ? "var(--green)" : "var(--red)") : null;
+
+  let svg = `<svg viewBox="0 0 ${VIEW_W} ${VIEW_H}" style="width:100%;min-width:680px;display:block">`;
+  svg += `<defs>
+    <marker id="arrow-old" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="var(--old)"/></marker>
+    <marker id="arrow-shared" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="var(--text-3)"/></marker>
+    <marker id="arrow-new" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="var(--new)"/></marker>
+  </defs>`;
+
+  for (let h = 100; h <= 105; h++) {
+    svg += `<text x="${nodeX(h)}" y="${VIEW_H - 8}" text-anchor="middle" font-size="11" fill="var(--text-3)">高度 ${h}</text>`;
+  }
+  svg += `<text x="${nodeX(102)}" y="${LANE_Y.old}" text-anchor="middle" font-size="12" fill="var(--old)">旧分叉</text>`;
+  if (produced.has("X103")) {
+    svg += `<text x="${nodeX(102)}" y="${LANE_Y.new}" text-anchor="middle" font-size="12" fill="var(--new)">新分叉</text>`;
+  }
+
+  for (const child of NODES) {
+    if (!child.parent || !produced.has(child.id)) continue;
+    const parent = NODE_MAP[child.parent];
+    const x1 = nodeX(parent.height) + NODE_W / 2;
+    const y1 = LANE_Y[parent.lane];
+    const x2 = nodeX(child.height) - NODE_W / 2 - 4;
+    const y2 = LANE_Y[child.lane];
+    const mid = (x1 + x2) / 2;
+    const dashed = orphan.has(child.id);
+    svg += `<path d="M ${x1} ${y1} C ${mid} ${y1}, ${mid} ${y2}, ${x2} ${y2}" fill="none" stroke="${laneColor(child.lane)}" stroke-width="1.5" ${dashed ? 'stroke-dasharray="5 4" opacity="0.55"' : ""} marker-end="url(#arrow-${child.lane})"/>`;
+  }
+
+  for (const n of NODES) {
+    if (!produced.has(n.id)) continue;
+    const cx = nodeX(n.height);
+    const cy = LANE_Y[n.lane];
+    const isOrphan = orphan.has(n.id);
+    const isCompared = compared.has(n.id);
+    const isFocus = focus.has(n.id);
+    const stroke = isCompared ? compareColor : isFocus ? "var(--accent)" : laneColor(n.lane);
+    const strokeWidth = isCompared || isFocus ? 2.5 : 1.25;
+    const fill = isCompared ? (stage.compare.match ? "var(--ok-bg)" : "var(--bad-bg)") : isOrphan ? "var(--fill)" : "var(--panel)";
+    const dash = isOrphan && !isCompared ? 'stroke-dasharray="5 4"' : "";
+    svg += `<rect x="${cx - NODE_W / 2}" y="${cy - NODE_H / 2}" width="${NODE_W}" height="${NODE_H}" rx="6" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}" ${dash}/>`;
+    svg += `<text x="${cx}" y="${cy - 3}" text-anchor="middle" font-size="14" font-weight="600" fill="${isOrphan ? "var(--text-2)" : "var(--text)"}">${n.id}</text>`;
+    svg += `<text x="${cx}" y="${cy + 14}" text-anchor="middle" font-size="11" fill="var(--text-3)">${isOrphan ? "孤块" : "#" + n.height}</text>`;
+    if (ingested.has(n.id)) {
+      svg += `<circle cx="${cx + NODE_W / 2 - 9}" cy="${cy - NODE_H / 2 + 9}" r="4" fill="${isOrphan ? "var(--red)" : "var(--green)"}"/>`;
+    }
+  }
+
+  if (stage.compare) {
+    const a = NODE_MAP[stage.compare.local];
+    const b = NODE_MAP[stage.compare.expected];
+    const label = stage.compare.match ? `${a.id} = ${b.id}` : `${a.id} ≠ ${b.id}`;
+    if (a.id === b.id) {
+      const x = nodeX(a.height);
+      const y = LANE_Y[a.lane] + NODE_H / 2 + 20;
+      svg += `<text x="${x}" y="${y}" text-anchor="middle" font-size="13" font-weight="600" fill="${compareColor}">共同祖先  ${esc(label)}</text>`;
+    } else {
+      const x = nodeX(a.height);
+      const y1 = LANE_Y[a.lane] + NODE_H / 2;
+      const y2 = LANE_Y[b.lane] - NODE_H / 2;
+      const midY = (y1 + y2) / 2;
+      svg += `<line x1="${x}" y1="${y1 + 2}" x2="${x}" y2="${y2 - 2}" stroke="${compareColor}" stroke-width="2" stroke-dasharray="4 3"/>`;
+      svg += `<rect x="${x - 52}" y="${midY - 12}" width="104" height="24" rx="12" fill="var(--bg)" stroke="${compareColor}"/>`;
+      svg += `<text x="${x}" y="${midY + 4}" text-anchor="middle" font-size="12" font-weight="600" fill="${compareColor}">${esc(label)}</text>`;
+    }
+  }
+
+  if (stage.focusLabel && stage.focus.length) {
+    const last = NODE_MAP[stage.focus[stage.focus.length - 1]];
+    const x = nodeX(last.height);
+    const y = last.lane === "old" ? LANE_Y[last.lane] - NODE_H / 2 - 26 : LANE_Y[last.lane] + NODE_H / 2 + 18;
+    svg += `<text x="${x}" y="${y}" text-anchor="middle" font-size="12" fill="var(--accent)">${esc(stage.focusLabel)}</text>`;
+  }
+
+  const cp = NODE_MAP[stage.checkpoint];
+  const cpX = nodeX(cp.height);
+  const cpY = LANE_Y[cp.lane] - NODE_H / 2 - 8;
+  svg += `<path d="M ${cpX - 6} ${cpY - 10} L ${cpX + 6} ${cpY - 10} L ${cpX} ${cpY} z" fill="var(--text-2)"/>`;
+  svg += `<text x="${cpX + 10}" y="${cpY - 2}" font-size="11" fill="var(--text-2)">checkpoint</text>`;
+  svg += `</svg>`;
+  document.getElementById("diagram").innerHTML = svg;
+}
+
+function render() {
+  const stage = STAGES[index];
+  const last = STAGES.length - 1;
+  const stale = stage.ingested.some((id) => stage.orphan.includes(id));
+  const tail = (stage.canonical.split("→").pop() || "").trim().replace(/（.*）/, "");
+
+  document.getElementById("btnPrev").disabled = index === 0;
+  document.getElementById("btnNext").disabled = index === last;
+  document.getElementById("btnPlay").textContent = playing ? "暂停" : "自动播放";
+  document.getElementById("stepMeta").textContent = `${index + 1} / ${STAGES.length} · ${stage.phase}`;
+
+  document.getElementById("pills").innerHTML = STAGES.map((s, i) =>
+    `<button type="button" class="pill${i === index ? " active" : ""}" data-i="${i}">${esc(s.short)}</button>`
+  ).join("");
+
+  document.getElementById("stats").innerHTML = `
+    <div class="stat"><div class="label">本地 checkpoint</div><div class="value">${NODE_MAP[stage.checkpoint].height}</div></div>
+    <div class="stat info"><div class="label">网络主链尾部</div><div class="value">${esc(tail)}</div></div>
+    <div class="stat ${stale ? "danger" : "success"}"><div class="label">本地视图</div><div class="value">${stale ? "过期" : "一致"}</div></div>
+    <div class="stat"><div class="label">阶段</div><div class="value">${esc(stage.phase)}</div></div>`;
+
+  document.getElementById("cardTitle").textContent = stage.title;
+  document.getElementById("cardTrail").textContent = `网络主链：${stage.canonical}`;
+  document.getElementById("body").textContent = stage.body;
+  renderDiagram(stage);
+
+  if (stage.vars) {
+    document.getElementById("vars").innerHTML = `<table>
+      <tr><th>变量</th><th>值</th></tr>
+      <tr><td>checkpoint</td><td>104</td></tr>
+      <tr><td>minKeep</td><td>41</td></tr>
+      <tr><td>candidate</td><td>${esc(stage.vars.candidate)}</td></tr>
+      <tr><td>parentHash（新链）</td><td>${esc(stage.vars.parentHash)}</td></tr>
+      <tr><td>stored（本地）</td><td>${esc(stage.vars.stored)}</td></tr>
+      <tr><td>结果</td><td>${esc(stage.vars.result)}</td></tr>
+    </table>`;
+  } else {
+    document.getElementById("vars").innerHTML = "";
+  }
+
+  document.getElementById("note").innerHTML = stage.note
+    ? `<div class="callout ${stage.note.tone}">${esc(stage.note.text)}</div>` : "";
+
+  if (stage.code) {
+    const hl = new Set(stage.code.highlight);
+    document.getElementById("codeCard").innerHTML = `<div class="card">
+      <div class="card-h"><span><code>${esc(stage.code.title)}</code></span></div>
+      <div class="card-b"><div class="code">${stage.code.lines.map((line, i) =>
+        `<div class="line${hl.has(i) ? " hl" : ""}">${esc(line || " ")}</div>`
+      ).join("")}</div></div></div>`;
+  } else {
+    document.getElementById("codeCard").innerHTML = "";
+  }
+
+  const orphan = new Set(stage.orphan);
+  const rows = NODES.filter((n) => stage.ingested.includes(n.id)).sort((a, b) => a.height - b.height);
+  document.getElementById("dbTrail").textContent =
+    `checkpoint = ${NODE_MAP[stage.checkpoint].height} / ${stage.checkpoint}`;
+  document.getElementById("dbTable").innerHTML = `<table>
+    <tr><th>block_number</th><th>block_hash</th><th>parent_hash</th><th>在网络中</th></tr>
+    ${rows.map((n) => `<tr class="${orphan.has(n.id) ? "danger" : ""}">
+      <td>${n.height}</td><td>${n.id}</td><td>${n.parent || "—"}</td><td>${orphan.has(n.id) ? "已孤立" : "主链"}</td>
+    </tr>`).join("")}
+  </table>`;
+}
+
+function stopPlay() {
+  playing = false;
+  if (timer) { clearTimeout(timer); timer = null; }
+}
+
+function schedule() {
+  if (!playing) return;
+  if (index >= STAGES.length - 1) { stopPlay(); render(); return; }
+  timer = setTimeout(() => {
+    index = Math.min(index + 1, STAGES.length - 1);
+    render();
+    schedule();
+  }, AUTO_PLAY_MS);
+}
+
+document.getElementById("btnPrev").onclick = () => { stopPlay(); if (index > 0) index--; render(); };
+document.getElementById("btnNext").onclick = () => { stopPlay(); if (index < STAGES.length - 1) index++; render(); };
+document.getElementById("btnPlay").onclick = () => {
+  if (playing) { stopPlay(); render(); return; }
+  if (index >= STAGES.length - 1) index = 0;
+  playing = true;
+  render();
+  schedule();
+};
+document.getElementById("pills").onclick = (e) => {
+  const btn = e.target.closest("[data-i]");
+  if (!btn) return;
+  stopPlay();
+  index = Number(btn.dataset.i);
+  render();
+};
+
+render();
+</script>
+</body>
+</html>

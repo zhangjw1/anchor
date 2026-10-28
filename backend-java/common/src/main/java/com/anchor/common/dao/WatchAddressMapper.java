@@ -1,6 +1,6 @@
 package com.anchor.common.dao;
 
-import com.anchor.common.dataobject.WatchAddressDO;
+import com.anchor.common.entity.WatchAddressDO;
 import com.anchor.common.dto.WatchAddressDTO;
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
 import org.apache.ibatis.annotations.Mapper;

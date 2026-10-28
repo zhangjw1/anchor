@@ -3,7 +3,7 @@ package com.anchor.indexer.service.impl;
 import com.anchor.common.chain.ChainDefinition;
 import com.anchor.common.constant.AnchorConstants;
 import com.anchor.common.dao.SwapMapper;
-import com.anchor.common.dataobject.SwapDO;
+import com.anchor.common.entity.SwapDO;
 import com.anchor.common.domain.ConfirmStatusEnum;
 import com.anchor.common.dto.ChainEventDTO;
 import com.anchor.indexer.service.ConfirmationService;
@@ -34,9 +34,9 @@ public class ConfirmationServiceImpl implements ConfirmationService {
                 swapMapper.updateStatus(chain.chainId(), swap.getTxHash(), swap.getLogIndex(), next, AnchorConstants.ACTOR_INDEXER);
             }
             if (swap.getBlockNumber() < head || changed) {
+                // 计算区块交易的确认进度
                 int confirmations = (int) (head - swap.getBlockNumber() + 1);
-                events.add(ChainEventDTO.confirmation(chain.chainId(), head, swap.getTxHash(), swap.getLogIndex(), next,
-                        confirmations, swap.getWatchedAddress()));
+                events.add(ChainEventDTO.confirmation(chain.chainId(), head, swap.getTxHash(), swap.getLogIndex(), next, confirmations, swap.getWatchedAddress()));
             }
         }
         return events;

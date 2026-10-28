@@ -1,9 +1,6 @@
 package com.anchor.parser.swap;
 
-import com.anchor.common.chain.ChainLog;
-import com.anchor.common.chain.ChainReceipt;
-import com.anchor.common.chain.ChainTransaction;
-import com.anchor.common.chain.SwapParser;
+import com.anchor.common.chain.*;
 import com.anchor.common.constant.AnchorConstants;
 import com.anchor.common.evm.generated.Erc20;
 import com.anchor.common.evm.generated.UniswapV3Pool;
@@ -46,7 +43,9 @@ public class UniswapV3SwapParser implements SwapParser {
      */
     @Override
     public Optional<ParsedSwap> parse(SwapParseContext context) {
+        //获取uniswapV3的工厂地址，uni里面池子可以有很多个，但是工厂地址是唯一的
         String factory = context.chain().contracts().uniswapV3Factory();
+        // swap交易的发起者地址，即用户地址
         String user = Addresses.lower(context.transaction().from());
         if (factory == null || user == null) {
             return Optional.empty();
@@ -55,6 +54,7 @@ public class UniswapV3SwapParser implements SwapParser {
         if (verified.size() != 1) {
             return Optional.empty();
         }
+        // 计算用户的净流入流出，key是token地址，value是数量，负数表示付出，正数表示收到
         Map<String, BigInteger> delta = netFlow(context.chain(), context.transaction(), context.receipt(), user);
         List<Map.Entry<String, BigInteger>> inputs = new ArrayList<>();
         List<Map.Entry<String, BigInteger>> outputs = new ArrayList<>();
@@ -96,6 +96,7 @@ public class UniswapV3SwapParser implements SwapParser {
             if (logItem.topics().isEmpty() || !SWAP_TOPIC.equalsIgnoreCase(logItem.topics().get(0))) {
                 continue;
             }
+            // 获取这笔swap交易的池子工厂地址
             String poolFactory = poolFactoryLookup.findFactory(context.chain().chainId(), logItem.address()).orElse(null);
             if (factory.equalsIgnoreCase(poolFactory)) {
                 verified.add(logItem);
@@ -105,8 +106,9 @@ public class UniswapV3SwapParser implements SwapParser {
     }
 
     /** 付出是监控地址转出的 ERC20 加上 tx.value；收到是转入的 ERC20，以及用户或 Router 拆出的 ETH。 */
-    private Map<String, BigInteger> netFlow(com.anchor.common.chain.ChainDefinition chain, ChainTransaction tx, ChainReceipt receipt, String user) {
+    private Map<String, BigInteger> netFlow(ChainDefinition chain, ChainTransaction tx, ChainReceipt receipt, String user) {
         Map<String, BigInteger> delta = new HashMap<>();
+        // 一笔swap可能有很多条receipt日志，里面涉及与池子，router等的交互
         for (ChainLog logItem : receipt.logs()) {
             applyTransfer(delta, logItem, user);
             applyWithdrawal(delta, chain, tx, logItem, user);

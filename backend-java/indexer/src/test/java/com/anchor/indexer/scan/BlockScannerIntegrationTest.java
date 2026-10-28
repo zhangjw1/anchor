@@ -10,7 +10,7 @@ import com.anchor.common.constant.KafkaConstants;
 import com.anchor.common.constant.RedisKeys;
 import com.anchor.common.dao.CheckpointMapper;
 import com.anchor.common.dao.SwapMapper;
-import com.anchor.common.dataobject.SwapDO;
+import com.anchor.common.entity.SwapDO;
 import com.anchor.common.domain.ConfirmStatusEnum;
 import com.anchor.common.dto.ChainEventDTO;
 import com.anchor.common.dto.SwapEventDTO;

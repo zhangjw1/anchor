@@ -5,6 +5,7 @@ import com.anchor.common.chain.ChainDefinition;
 import com.anchor.common.chain.ChainReceipt;
 import com.anchor.common.chain.ChainRegistry;
 import com.anchor.common.chain.RpcGateway;
+import com.anchor.common.chain.SwapParser;
 import com.anchor.common.constant.AnchorConstants;
 import com.anchor.common.constant.KafkaConstants;
 import com.anchor.common.constant.RedisKeys;
@@ -12,10 +13,12 @@ import com.anchor.common.dao.CheckpointMapper;
 import com.anchor.common.dao.SwapMapper;
 import com.anchor.common.entity.SwapDO;
 import com.anchor.common.domain.ConfirmStatusEnum;
+import com.anchor.common.domain.SwapDirectionEnum;
 import com.anchor.common.dto.ChainEventDTO;
 import com.anchor.common.dto.SwapEventDTO;
 import com.anchor.indexer.bootstrap.IndexerApplication;
 import com.anchor.indexer.dto.ScanStepDTO;
+import com.anchor.indexer.service.BlockIngestionService;
 import com.anchor.indexer.service.ChainEventPublishService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -83,6 +86,8 @@ class BlockScannerIntegrationTest {
     @Autowired
     private SwapMapper swapMapper;
     @Autowired
+    private BlockIngestionService blockIngestionService;
+    @Autowired
     private ScriptedRpcGateway rpc;
     @Autowired
     private RecordingPublisher publisher;
@@ -132,6 +137,24 @@ class BlockScannerIntegrationTest {
         swapMapper.saveBatch(List.of(swap(chain.chainId(), 100L, "0x123", 1, "0xaaa")));
         swapMapper.saveBatch(List.of(swap(chain.chainId(), 100L, "0x123", 1, "0xaaa")));
         assertEquals(1L, swapMapper.countByChain(chain.chainId()));
+    }
+
+    @Test
+    void persistReplacesHopsIdempotently() {
+        ChainDefinition chain = chainRegistry.requireByKey("base");
+        ChainBlock block = new ChainBlock(200L, "0x200", "0x199", 10L, List.of());
+        SwapParser.ParsedSwap twoHops = parsedSwap(chain.chainId(), List.of(
+                hop(0, "0x1111111111111111111111111111111111111111", "0x3333333333333333333333333333333333333333", 3),
+                hop(1, "0x3333333333333333333333333333333333333333", "0x2222222222222222222222222222222222222222", 7)));
+        blockIngestionService.persist(chain, block, List.of(twoHops), 0L);
+        blockIngestionService.persist(chain, block, List.of(twoHops), 0L);
+        assertEquals(List.of(3, 7), hopLogIndexes("0xmulti"));
+        assertEquals("Uniswap UniversalRouter", jdbc.queryForObject("SELECT aggregator FROM swap WHERE tx_hash = ?", String.class, "0xmulti"));
+
+        SwapParser.ParsedSwap oneHop = parsedSwap(chain.chainId(), List.of(
+                hop(0, "0x1111111111111111111111111111111111111111", "0x2222222222222222222222222222222222222222", 3)));
+        blockIngestionService.persist(chain, block, List.of(oneHop), 0L);
+        assertEquals(List.of(3), hopLogIndexes("0xmulti"));
     }
 
     @Test
@@ -212,6 +235,22 @@ class BlockScannerIntegrationTest {
     private String hash(long chainId, long blockNumber) {
         List<String> hashes = jdbc.queryForList("SELECT block_hash FROM block_hash WHERE chain_id = ? AND block_number = ?", String.class, chainId, blockNumber);
         return hashes.isEmpty() ? null : hashes.get(0);
+    }
+
+    private List<Integer> hopLogIndexes(String txHash) {
+        return jdbc.queryForList("SELECT h.log_index FROM swap_hop h JOIN swap s ON s.id = h.swap_id WHERE s.tx_hash = ? ORDER BY h.hop_index",
+                Integer.class, txHash);
+    }
+
+    private static SwapParser.ParsedHop hop(int hopIndex, String tokenIn, String tokenOut, int logIndex) {
+        return new SwapParser.ParsedHop(hopIndex, AnchorConstants.DEX_UNISWAP_V2, "0xpool" + logIndex, tokenIn, tokenOut,
+                BigInteger.ONE, BigInteger.TEN, logIndex);
+    }
+
+    private static SwapParser.ParsedSwap parsedSwap(long chainId, List<SwapParser.ParsedHop> hops) {
+        return new SwapParser.ParsedSwap(chainId, "0xmulti", hops.get(0).logIndex(), 200L, "0x200", 10L, "0xabc", "0xdef",
+                AnchorConstants.DEX_UNISWAP_V2, SwapDirectionEnum.SWAP, hops.get(0).tokenIn(), hops.get(hops.size() - 1).tokenOut(),
+                BigInteger.ONE, BigInteger.TEN, "0xabc", "Uniswap UniversalRouter", hops);
     }
 
     private static SwapDO swap(long chainId, long blockNumber, String txHash, int logIndex, String blockHash) {

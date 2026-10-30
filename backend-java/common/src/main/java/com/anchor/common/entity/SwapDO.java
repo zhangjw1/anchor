@@ -55,6 +55,10 @@ public class SwapDO {
     @TableField("dex")
     private String dex;
 
+    /** 聚合器名称；未命中时为空 */
+    @TableField("aggregator")
+    private String aggregator;
+
     /** 方向：BUY / SELL / SWAP */
     @TableField("direction")
     private String direction;
@@ -119,6 +123,8 @@ public class SwapDO {
     public void setTxTo(String txTo) { this.txTo = txTo; }
     public String getDex() { return dex; }
     public void setDex(String dex) { this.dex = dex; }
+    public String getAggregator() { return aggregator; }
+    public void setAggregator(String aggregator) { this.aggregator = aggregator; }
     public String getDirection() { return direction; }
     public void setDirection(String direction) { this.direction = direction; }
     public String getTokenIn() { return tokenIn; }

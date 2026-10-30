@@ -71,14 +71,29 @@ API 提供 `/ws`。字段名 camelCase，金额是最小单位十进制字符串
   "blockNumber": 21432908,
   "direction": "BUY",
   "dex": "Uniswap V3",
+  "aggregator": null,
   "tokenIn": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
   "tokenOut": "0x4200000000000000000000000000000000000006",
   "amountIn": "1000000",
   "amountOut": "500000000000000",
   "confirmStatus": "CONFIRMING",
-  "watchedAddress": "0xabc"
+  "watchedAddress": "0xabc",
+  "hops": [
+    {
+      "hopIndex": 0,
+      "dex": "Uniswap V3",
+      "pool": "0xd0b53d9277642d899dd5c7cce748381e5d0ecfba",
+      "tokenIn": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+      "tokenOut": "0x4200000000000000000000000000000000000006",
+      "amountIn": "1000000",
+      "amountOut": "500000000000000",
+      "logIndex": 12
+    }
+  ]
 }
 ```
+
+`aggregator`、`hops` 的含义与 `swap-events` 相同（见 `kafka-topics.md`）。未命中聚合器时 `aggregator` 为 `null`；单池交换的 `hops` 也有一条。
 
 确认变化，来自 `chain-events`：
 

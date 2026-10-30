@@ -10,13 +10,13 @@
     <insert id="saveBatch">
         INSERT INTO swap (
             chain_id, tx_hash, log_index, block_number, block_hash, block_timestamp,
-            tx_from, tx_to, dex, direction, token_in, token_out, amount_in, amount_out,
+            tx_from, tx_to, dex, aggregator, direction, token_in, token_out, amount_in, amount_out,
             confirm_status, watched_address, created_by, updated_by
         ) VALUES
         <foreach collection="list" item="item" separator=",">
             (
                 #{item.chainId}, #{item.txHash}, #{item.logIndex}, #{item.blockNumber}, #{item.blockHash},
-                #{item.blockTimestamp}, #{item.txFrom}, #{item.txTo}, #{item.dex}, #{item.direction},
+                #{item.blockTimestamp}, #{item.txFrom}, #{item.txTo}, #{item.dex}, #{item.aggregator}, #{item.direction},
                 #{item.tokenIn}, #{item.tokenOut},
                 #{item.amountIn, typeHandler=com.anchor.common.handler.BigIntegerNumericTypeHandler},
                 #{item.amountOut, typeHandler=com.anchor.common.handler.BigIntegerNumericTypeHandler},
@@ -30,6 +30,7 @@
             tx_from = EXCLUDED.tx_from,
             tx_to = EXCLUDED.tx_to,
             dex = EXCLUDED.dex,
+            aggregator = EXCLUDED.aggregator,
             direction = EXCLUDED.direction,
             token_in = EXCLUDED.token_in,
             token_out = EXCLUDED.token_out,
@@ -50,6 +51,7 @@
                sw.block_timestamp * 1000 AS timestamp_ms,
                sw.direction,
                sw.dex,
+               sw.aggregator,
                sw.token_in,
                tin.symbol AS token_in_symbol,
                tin.decimals AS token_in_decimals,
@@ -101,4 +103,14 @@
           AND block_number &gt; #{ancestor}
           AND confirm_status &lt;&gt; #{status}
     </update>
+
+    <select id="listIdsByKeys" resultType="com.anchor.common.entity.SwapDO">
+        SELECT id, tx_hash, log_index
+        FROM swap
+        WHERE chain_id = #{chainId}
+          AND (tx_hash, log_index) IN
+        <foreach collection="keys" item="key" open="(" separator="," close=")">
+            (#{key.txHash}, #{key.logIndex})
+        </foreach>
+    </select>
 </mapper>

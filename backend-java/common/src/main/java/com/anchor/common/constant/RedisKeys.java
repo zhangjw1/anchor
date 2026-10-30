@@ -25,6 +25,12 @@ public final class RedisKeys {
         return "anchor:pool-factory:" + chainId + ":" + pool;
     }
     /**
+     * 池子 token0/token1 缓存，值为 token0,token1。
+     */
+    public static String poolTokens(long chainId, String pool) {
+        return "anchor:pool-tokens:" + chainId + ":" + pool;
+    }
+    /**
      * 某条链已处理的重组次数。
      */
     public static String reorgCount(long chainId) {

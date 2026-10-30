@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.anchor.common.dao.SwapHopMapper">
+    <resultMap id="hopRow" type="com.anchor.common.dto.SwapHopDTO" autoMapping="true">
+        <result column="amount_in" property="amountIn"
+                typeHandler="com.anchor.common.handler.BigIntegerNumericTypeHandler"/>
+        <result column="amount_out" property="amountOut"
+                typeHandler="com.anchor.common.handler.BigIntegerNumericTypeHandler"/>
+    </resultMap>
+
+    <insert id="saveBatch">
+        INSERT INTO swap_hop (
+            swap_id, hop_index, dex, pool, token_in, token_out, amount_in, amount_out, log_index,
+            created_by, updated_by
+        ) VALUES
+        <foreach collection="list" item="item" separator=",">
+            (
+                #{item.swapId}, #{item.hopIndex}, #{item.dex}, #{item.pool}, #{item.tokenIn}, #{item.tokenOut},
+                #{item.amountIn, typeHandler=com.anchor.common.handler.BigIntegerNumericTypeHandler},
+                #{item.amountOut, typeHandler=com.anchor.common.handler.BigIntegerNumericTypeHandler},
+                #{item.logIndex}, #{item.createdBy}, #{item.updatedBy}
+            )
+        </foreach>
+    </insert>
+
+    <delete id="deleteBySwapIds">
+        DELETE FROM swap_hop
+        WHERE swap_id IN
+        <foreach collection="swapIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </delete>
+
+    <select id="listBySwapIds" resultMap="hopRow">
+        SELECT h.swap_id,
+               h.hop_index,
+               h.dex,
+               h.pool,
+               h.token_in,
+               tin.symbol AS token_in_symbol,
+               tin.decimals AS token_in_decimals,
+               h.amount_in,
+               h.token_out,
+               tout.symbol AS token_out_symbol,
+               tout.decimals AS token_out_decimals,
+               h.amount_out,
+               h.log_index
+        FROM swap_hop h
+        INNER JOIN swap sw ON sw.id = h.swap_id
+        LEFT JOIN token tin ON tin.chain_id = sw.chain_id AND tin.address = h.token_in
+        LEFT JOIN token tout ON tout.chain_id = sw.chain_id AND tout.address = h.token_out
+        WHERE h.swap_id IN
+        <foreach collection="swapIds" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+        ORDER BY h.swap_id, h.hop_index
+    </select>
+</mapper>

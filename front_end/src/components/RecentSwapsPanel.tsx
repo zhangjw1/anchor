@@ -42,8 +42,7 @@ export const RecentSwapsPanel: React.FC<RecentSwapsPanelProps> = ({
   const [showOnlyWatched, setShowOnlyWatched] = useState(false);
   const limitCount = FEED_LIMIT;
 
-  // Available DEXes
-  const dexList = ['ALL', 'Uniswap V3', '1inch', 'Aerodrome', 'Curve', 'SushiSwap'];
+  const dexList = ['ALL', 'Uniswap V3', 'Uniswap V2', 'Aerodrome', 'Aerodrome Slipstream', 'Multi'];
 
   // Filtered swaps
   const filteredSwaps = swaps.filter((tx) => {

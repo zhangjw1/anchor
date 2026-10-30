@@ -1,4 +1,4 @@
-package com.anchor.parser.swap;
+package com.anchor.common.support;
 
 import org.web3j.abi.TypeReference;
 import org.web3j.abi.datatypes.Type;
@@ -15,5 +15,12 @@ public final class AbiOutputs {
     @SuppressWarnings({"rawtypes", "unchecked"})
     public static List<TypeReference<Type>> single(TypeReference<?> reference) {
         return Arrays.asList((TypeReference) reference);
+    }
+
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    public static List<TypeReference<Type>> of(TypeReference<?>... references) {
+        TypeReference[] cast = new TypeReference[references.length];
+        System.arraycopy(references, 0, cast, 0, references.length);
+        return Arrays.asList(cast);
     }
 }

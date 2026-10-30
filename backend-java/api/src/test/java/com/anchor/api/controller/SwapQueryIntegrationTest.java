@@ -4,6 +4,8 @@ import com.anchor.api.bootstrap.ApiApplication;
 import com.anchor.common.constant.AnchorConstants;
 import com.anchor.common.domain.ConfirmStatusEnum;
 import com.anchor.common.entity.SwapDO;
+import com.anchor.common.entity.SwapHopDO;
+import com.anchor.common.dao.SwapHopMapper;
 import com.anchor.common.dao.SwapMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -56,6 +58,8 @@ class SwapQueryIntegrationTest {
     private MockMvc mockMvc;
     @Autowired
     private SwapMapper swapMapper;
+    @Autowired
+    private SwapHopMapper swapHopMapper;
 
     @Test
     void addsAddressAndListsSwap() throws Exception {
@@ -88,7 +92,10 @@ class SwapQueryIntegrationTest {
         swap.setWatchedAddress(address);
         swap.setCreatedBy("test");
         swap.setUpdatedBy("test");
+        swap.setAggregator("Uniswap UniversalRouter");
         swapMapper.saveBatch(List.of(swap));
+        Long swapId = swapMapper.listIdsByKeys(8453L, List.of(swap)).get(0).getId();
+        swapHopMapper.saveBatch(List.of(hop(swapId, swap)));
 
         mockMvc.perform(get("/api/v1/swaps").param("chainId", "8453").param("address", address).param("direction", "BUY"))
                 .andExpect(status().isOk())
@@ -97,6 +104,26 @@ class SwapQueryIntegrationTest {
                 .andExpect(jsonPath("$.items[0].blockNumber").value(50))
                 .andExpect(jsonPath("$.items[0].tokenIn.amount").value("1000000"))
                 .andExpect(jsonPath("$.items[0].tokenOut.address").value("0x4200000000000000000000000000000000000006"))
-                .andExpect(jsonPath("$.items[0].direction").value("BUY"));
+                .andExpect(jsonPath("$.items[0].direction").value("BUY"))
+                .andExpect(jsonPath("$.items[0].aggregator").value("Uniswap UniversalRouter"))
+                .andExpect(jsonPath("$.items[0].hops.length()").value(1))
+                .andExpect(jsonPath("$.items[0].hops[0].pool").value("0xd0b53d9277642d899dd5c7cce748381e5d0ecfba"))
+                .andExpect(jsonPath("$.items[0].hops[0].logIndex").value(4));
+    }
+
+    private static SwapHopDO hop(Long swapId, SwapDO swap) {
+        SwapHopDO hop = new SwapHopDO();
+        hop.setSwapId(swapId);
+        hop.setHopIndex(0);
+        hop.setDex(AnchorConstants.DEX_UNISWAP_V3);
+        hop.setPool("0xd0b53d9277642d899dd5c7cce748381e5d0ecfba");
+        hop.setTokenIn(swap.getTokenIn());
+        hop.setTokenOut(swap.getTokenOut());
+        hop.setAmountIn(swap.getAmountIn());
+        hop.setAmountOut(swap.getAmountOut());
+        hop.setLogIndex(swap.getLogIndex());
+        hop.setCreatedBy("test");
+        hop.setUpdatedBy("test");
+        return hop;
     }
 }

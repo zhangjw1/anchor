@@ -20,6 +20,18 @@ public final class AnchorConstants {
     /** 交换记录中的 DEX 名称，Uniswap V3 解析器写入 swap.dex。 */
     public static final String DEX_UNISWAP_V3 = "Uniswap V3";
 
+    /** Uniswap V2 池子交换。 */
+    public static final String DEX_UNISWAP_V2 = "Uniswap V2";
+
+    /** Aerodrome 经典（V2 风格）池子交换。 */
+    public static final String DEX_AERODROME = "Aerodrome";
+
+    /** Aerodrome Slipstream（CL）池子交换。 */
+    public static final String DEX_AERODROME_SLIPSTREAM = "Aerodrome Slipstream";
+
+    /** 同一笔交易跨多个协议时的顶层 dex。 */
+    public static final String DEX_MULTI = "Multi";
+
     /** 本地 block_hash 表最多保留的最近区块数；重组回溯下限与清理旧哈希都用这个窗口。 */
     public static final int RECENT_HASH_LIMIT = 64;
 
@@ -40,6 +52,12 @@ public final class AnchorConstants {
 
     /** Uniswap V3 池子对应 factory 地址在 Redis 中的缓存时长（天）。 */
     public static final int POOL_CACHE_DAYS = 7;
+
+    /** 一个 ABI 字（32 字节）带 0x 前缀的十六进制长度，eth_call 返回短于它视为无效。 */
+    public static final int ABI_WORD_HEX_LENGTH = 66;
+
+    /** 一个 ABI 字（32 字节）不带前缀的十六进制长度。 */
+    public static final int ABI_WORD_HEX_CHARS = 64;
 
     /** 交换列表查询的默认每页条数。 */
     public static final int DEFAULT_PAGE_SIZE = 20;

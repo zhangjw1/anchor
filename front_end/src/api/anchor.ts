@@ -21,6 +21,15 @@ export interface TokenAmountDto {
   amount: string;
 }
 
+export interface SwapHopDto {
+  hopIndex: number;
+  dex: string;
+  pool: string;
+  tokenIn: TokenAmountDto;
+  tokenOut: TokenAmountDto;
+  logIndex: number;
+}
+
 export interface SwapDto {
   id: string;
   chainId: number;
@@ -30,10 +39,12 @@ export interface SwapDto {
   timestamp: number;
   direction: SwapDirection;
   dex: string;
+  aggregator?: string | null;
   tokenIn: TokenAmountDto;
   tokenOut: TokenAmountDto;
   confirmStatus: ConfirmStatus;
   watchedAddress: string;
+  hops?: SwapHopDto[];
 }
 
 export interface SwapPageDto {

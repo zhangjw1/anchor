@@ -99,5 +99,11 @@
   },
   "poolFactories": {
     "0x2df380544b88adb3ad0a94100dcc45fd705aae2d": "0x33128a8fc17869897dce68ed026d694621f6fdfd"
+  },
+  "poolTokens": {
+    "0x2df380544b88adb3ad0a94100dcc45fd705aae2d": {
+      "token0": "0x07b3d902783c3c12b077508c3b5c00113d1291d0",
+      "token1": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913"
+    }
   }
 }

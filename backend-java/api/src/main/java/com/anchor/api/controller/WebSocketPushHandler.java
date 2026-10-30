@@ -78,12 +78,14 @@ public class WebSocketPushHandler extends TextWebSocketHandler implements WebSoc
         node.put("blockNumber", event.blockNumber());
         node.put("direction", event.direction());
         node.put("dex", event.dex());
+        node.put("aggregator", event.aggregator());
         node.put("tokenIn", event.tokenIn());
         node.put("tokenOut", event.tokenOut());
         node.put("amountIn", event.amountIn());
         node.put("amountOut", event.amountOut());
         node.put("confirmStatus", event.confirmStatus());
         node.put("watchedAddress", event.watchedAddress());
+        node.set("hops", objectMapper.valueToTree(event.hops() == null ? List.of() : event.hops()));
         publish(event.chainId(), node);
     }
     /**

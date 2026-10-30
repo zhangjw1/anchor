@@ -59,15 +59,44 @@ indexer 在 Swap 落库后生产。新入库和回滚后再次入库都发。
   "logIndex": 12,
   "blockNumber": 21432908,
   "direction": "BUY",
-  "dex": "Uniswap V3",
+  "dex": "Multi",
+  "aggregator": "Uniswap UniversalRouter",
   "tokenIn": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
   "tokenOut": "0x4200000000000000000000000000000000000006",
   "amountIn": "1000000",
   "amountOut": "500000000000000",
   "confirmStatus": "CONFIRMING",
-  "watchedAddress": "0xabc"
+  "watchedAddress": "0xabc",
+  "hops": [
+    {
+      "hopIndex": 0,
+      "dex": "Uniswap V2",
+      "pool": "0xpool1",
+      "tokenIn": "0x833589fcd6edb6e08f4c7c32d4f71b54bda02913",
+      "tokenOut": "0xtokenmid",
+      "amountIn": "1000000",
+      "amountOut": "998000000000000000",
+      "logIndex": 12
+    },
+    {
+      "hopIndex": 1,
+      "dex": "Aerodrome Slipstream",
+      "pool": "0xpool2",
+      "tokenIn": "0xtokenmid",
+      "tokenOut": "0x4200000000000000000000000000000000000006",
+      "amountIn": "998000000000000000",
+      "amountOut": "500000000000000",
+      "logIndex": 15
+    }
+  ]
 }
 ```
+
+- `logIndex` 取首跳 Swap 事件的日志序号，与 `(chainId, txHash, logIndex)` 一起作为幂等键。
+- `tokenIn` / `amountIn`、`tokenOut` / `amountOut` 是监控地址在整笔交易里的净付出和净收到；原生币用 `chains.yaml` 的 `nativeToken.address`。
+- `dex`：全部跳属于同一协议时为该协议名，跨协议时为 `Multi`。
+- `aggregator`：`tx.to` 命中 `chains.yaml` 的 `aggregators` 时为其名称，未命中时不出现该字段。
+- `hops`：按 `logIndex` 升序，`hopIndex` 从 0 递增。只包含位于净付出币到净收到币路径上的跳，同交易里无关的 Swap 不计入；聚合器拆单时可能出现多条并行路径。池子里的原生币以 WETH 地址出现。
 
 ## chain-events
 

@@ -20,7 +20,7 @@
 | `ChainRegistry` | `chain.YamlChainRegistry` |
 | `RpcGateway` | `common.manager.FailoverRpcGateway`（限流、重试、节点切换） |
 | `ChainScanner` | `indexer.scan.BlockScanner` |
-| `SwapParser` | `parser.swap.UniswapV3SwapParser` |
+| `SwapParser` | `parser.swap.CompositeSwapParser`（汇总 `parser.swap.hop` 下各协议的 `DexHopParser`） |
 
 ```mermaid
 flowchart TB
@@ -248,7 +248,14 @@ stateDiagram-v2
 
 ## 4. 单笔交易怎么解析成一笔交换
 
-`UniswapV3SwapParser` 只读回执里的日志，按三类事件计算监控地址每种代币的净变化：
+`CompositeSwapParser` 只读回执里的日志。各协议的跳解析器先找出经工厂校验的 Swap，再用净流量确定用户实际付出和收到的币，最后只保留两者之间路径上的跳：
+
+| 跳解析器（`parser.swap.hop`） | Swap 事件 | 校验工厂（`chains.yaml`） |
+|---|---|---|
+| `UniswapV3HopParser` | V3 `Swap(int256,int256,…)` | `uniswapV3Factory` |
+| `UniswapV2HopParser` | V2 `Swap(uint256×4)` | `uniswapV2Factory` |
+| `AerodromeHopParser` | Aerodrome 经典池 `Swap(sender,to,uint256×4)` | `aerodromeFactory` |
+| `AerodromeSlipstreamHopParser` | 与 V3 同签名 | `aerodromeSlipstreamFactory` |
 
 ```mermaid
 flowchart LR
@@ -258,21 +265,27 @@ flowchart LR
         W[Withdrawal 事件]
     end
     V[交易 value]
-    S --> S1{池子是否由 V3 Factory 创建}
-    S1 --> S2{校验通过的 Swap 是否恰好1个}
+    S --> S1{池子工厂是否为该协议 Factory}
+    S1 -->|否| X[丢弃该日志]
+    S1 -->|是| H[候选跳，按 logIndex 排序]
     T --> N[按代币累计净流量]
     W --> N
     V --> N
-    S2 -->|是| N
-    S2 -->|否| Z[返回空]
     N --> M{净流入流出是否各1种}
-    M -->|否| Z
-    M -->|是| P[ParsedSwap]
+    M -->|否| Z[返回空]
+    M -->|是| R[保留付出币到收到币路径上的跳]
+    H --> R
+    R --> E{剩余跳是否为空}
+    E -->|是| Z
+    E -->|否| P[ParsedSwap + hops]
 ```
 
-- **Transfer**：监控地址转出记为负，转入记为正。
+- **路径**：一跳被保留，当且仅当它的付出币能从用户付出币经若干跳到达，且它的收到币能继续到达用户收到币。串行多跳和聚合器拆单都会保留，同交易里无关的 Swap 被剔除。原生币按 WETH 匹配。
+- **dex**：全部跳同一协议时为该协议名，否则为 `Multi`。`logIndex` 取首跳。
+- **aggregator**：`tx.to` 命中 `chains.yaml` 的 `aggregators` 时写入名称。
+- **Transfer**：监控地址转出记为负，转入记为正。只计 3 个 topic 的 ERC20 Transfer。
 - **Withdrawal**：WETH 拆成 ETH，`src` 是用户或 Router 时，都记成用户收到了原生 ETH，地址用 `0xeeee…`。
 - **value**：交易随附的 ETH 记成付出。
 - **方向**：用 `quoteTokens` 判断。付出报价币、收到其他币是买入；反过来是卖出；两边都是或都不是报价币就是兑换。
 
-规则摘要：只保留工厂校验通过、且净输入和净输出都恰好一笔的 Uniswap V3 交换。
+规则摘要：只保留工厂校验通过、净输入和净输出都恰好一种币、且至少有一跳连通两者的交换。

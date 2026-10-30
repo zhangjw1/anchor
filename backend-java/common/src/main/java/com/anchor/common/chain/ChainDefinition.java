@@ -86,8 +86,10 @@ public record ChainDefinition(
             String uniswapV2Router,
             /** Aerodrome Router 地址，测试网可缺省。 */
             String aerodromeRouter,
-            /** Aerodrome Factory 地址，测试网可缺省。 */
-            String aerodromeFactory) {
+            /** Aerodrome 经典池 Factory 地址，测试网可缺省。 */
+            String aerodromeFactory,
+            /** Aerodrome Slipstream（CL）Factory 地址，测试网可缺省。 */
+            String aerodromeSlipstreamFactory) {
     }
 
     /**

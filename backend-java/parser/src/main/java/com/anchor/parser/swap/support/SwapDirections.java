@@ -1,4 +1,4 @@
-package com.anchor.parser.swap;
+package com.anchor.parser.swap.support;
 
 import com.anchor.common.chain.ChainDefinition;
 import com.anchor.common.domain.SwapDirectionEnum;
@@ -10,6 +10,7 @@ public final class SwapDirections {
 
     private SwapDirections() {
     }
+
     /**
      * 付出报价币得到非报价币为买入，反向为卖出，两边同为或都不是则为兑换。
      */

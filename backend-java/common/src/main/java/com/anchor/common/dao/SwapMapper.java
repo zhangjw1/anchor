@@ -43,4 +43,9 @@ public interface SwapMapper {
      */
     int markReorgedAfter(@Param("chainId") long chainId, @Param("ancestor") long ancestor,
                          @Param("status") String status, @Param("actor") String actor);
+
+    /**
+     * 按幂等键 (txHash, logIndex) 批量查主键，用于写 hop；只填充 id、txHash、logIndex。
+     */
+    List<SwapDO> listIdsByKeys(@Param("chainId") long chainId, @Param("keys") List<SwapDO> keys);
 }

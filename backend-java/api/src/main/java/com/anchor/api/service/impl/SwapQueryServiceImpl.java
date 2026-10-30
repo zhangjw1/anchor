@@ -4,16 +4,23 @@ import com.anchor.api.service.SwapQueryService;
 import com.anchor.common.chain.ChainRegistry;
 import com.anchor.common.constant.AnchorConstants;
 import com.anchor.common.dao.CheckpointMapper;
+import com.anchor.common.dao.SwapHopMapper;
 import com.anchor.common.dao.SwapMapper;
 import com.anchor.common.domain.AnchorException;
 import com.anchor.common.domain.ConfirmStatusEnum;
 import com.anchor.common.domain.SwapDirectionEnum;
 import com.anchor.common.dto.SwapDTO;
+import com.anchor.common.dto.SwapHopDTO;
 import com.anchor.common.query.SwapQuery;
 import com.anchor.common.support.Addresses;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import org.springframework.stereotype.Service;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * 按链、监控地址、协议和方向查询交换，并限制分页大小。
@@ -22,11 +29,14 @@ import org.springframework.stereotype.Service;
 public class SwapQueryServiceImpl implements SwapQueryService {
 
     private final SwapMapper swapMapper;
+    private final SwapHopMapper swapHopMapper;
     private final ChainRegistry chainRegistry;
     private final CheckpointMapper checkpointMapper;
 
-    public SwapQueryServiceImpl(SwapMapper swapMapper, ChainRegistry chainRegistry, CheckpointMapper checkpointMapper) {
+    public SwapQueryServiceImpl(SwapMapper swapMapper, SwapHopMapper swapHopMapper, ChainRegistry chainRegistry,
+                                CheckpointMapper checkpointMapper) {
         this.swapMapper = swapMapper;
+        this.swapHopMapper = swapHopMapper;
         this.chainRegistry = chainRegistry;
         this.checkpointMapper = checkpointMapper;
     }
@@ -52,7 +62,22 @@ public class SwapQueryServiceImpl implements SwapQueryService {
         }
         IPage<SwapDTO> result = swapMapper.listByQuery(new Page<>(current, pageSize), query);
         fillConfirmations(chainId, result);
+        fillHops(result);
         return result;
+    }
+
+    private void fillHops(IPage<SwapDTO> result) {
+        List<Long> ids = result.getRecords().stream().map(SwapDTO::getId).filter(id -> id != null).toList();
+        if (ids.isEmpty()) {
+            return;
+        }
+        Map<Long, List<SwapHopDTO>> bySwap = new HashMap<>();
+        for (SwapHopDTO hop : swapHopMapper.listBySwapIds(ids)) {
+            bySwap.computeIfAbsent(hop.getSwapId(), key -> new ArrayList<>()).add(hop);
+        }
+        for (SwapDTO row : result.getRecords()) {
+            row.setHops(bySwap.getOrDefault(row.getId(), List.of()));
+        }
     }
 
     private void fillConfirmations(long chainId, IPage<SwapDTO> result) {

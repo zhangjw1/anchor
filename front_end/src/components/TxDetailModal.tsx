@@ -138,6 +138,13 @@ export const TxDetailModal: React.FC<TxDetailModalProps> = ({
               </span>
             </div>
 
+            {tx.pair.aggregatorLabel && (
+              <div className="p-2.5 flex items-center justify-between hover:bg-slate-50">
+                <span className="text-slate-400 font-sans">聚合器</span>
+                <span className="text-slate-800 font-sans font-semibold">{tx.pair.aggregatorLabel}</span>
+              </div>
+            )}
+
             {/* Routing Path */}
             <div className="p-2.5 flex items-center justify-between hover:bg-slate-50">
               <span className="text-slate-400 font-sans">兑换路由</span>
@@ -175,17 +182,27 @@ export const TxDetailModal: React.FC<TxDetailModalProps> = ({
             </div>
           </div>
 
-          {/* Decoded Event Logs Preview */}
           <div>
             <div className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-              解码事件日志 (Decoded Logs)
+              路径跳数 (Hops)
             </div>
-            <div className="bg-slate-900 text-slate-300 p-3 rounded-lg font-mono text-[11px] leading-relaxed overflow-x-auto">
-              <div className="text-cyan-400 font-bold">// event Swap(sender, recipient, amount0, amount1, sqrtPriceX96, liquidity, tick)</div>
-              <div>topic[0]: 0xc42079f94a6350d7e6235f29174924f928cc983e828683ddd0d3d45c53fb375f</div>
-              <div>sender: {tx.senderAddress}</div>
-              <div>recipient: {tx.recipientAddress}</div>
-              <div>dex: {tx.dex} (Pool v3)</div>
+            <div className="bg-slate-900 text-slate-300 p-3 rounded-lg font-mono text-[11px] leading-relaxed overflow-x-auto space-y-2">
+              {(tx.hopDetails && tx.hopDetails.length > 0) ? tx.hopDetails.map((hop) => (
+                <div key={`${hop.hopIndex}-${hop.logIndex}`}>
+                  <div className="text-cyan-400 font-bold">
+                    hop[{hop.hopIndex}] {hop.dex} · logIndex={hop.logIndex}
+                  </div>
+                  <div>{hop.tokenIn} → {hop.tokenOut}</div>
+                  <div>amountIn={hop.amountIn} · amountOut={hop.amountOut}</div>
+                  <div className="text-slate-500 break-all">pool: {hop.pool}</div>
+                </div>
+              )) : (
+                <div>
+                  <div className="text-cyan-400 font-bold">单跳 / 无 hop 明细</div>
+                  <div>{tx.pair.fromToken} → {tx.pair.toToken}</div>
+                  <div>dex: {tx.dex}</div>
+                </div>
+              )}
             </div>
           </div>
         </div>

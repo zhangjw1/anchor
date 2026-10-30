@@ -245,9 +245,25 @@ components:
         amount:
           type: string
           description: 最小单位整数
+    SwapHop:
+      type: object
+      required: [hopIndex, dex, pool, tokenIn, tokenOut, logIndex]
+      properties:
+        hopIndex:
+          type: integer
+        dex:
+          type: string
+        pool:
+          type: string
+        tokenIn:
+          $ref: "#/components/schemas/TokenAmount"
+        tokenOut:
+          $ref: "#/components/schemas/TokenAmount"
+        logIndex:
+          type: integer
     Swap:
       type: object
-      required: [id, chainId, txHash, logIndex, blockNumber, direction, dex, tokenIn, tokenOut, confirmStatus, confirmations, watchedAddress]
+      required: [id, chainId, txHash, logIndex, blockNumber, direction, dex, tokenIn, tokenOut, confirmStatus, confirmations, watchedAddress, hops]
       properties:
         id:
           type: string
@@ -269,6 +285,10 @@ components:
           $ref: "#/components/schemas/Direction"
         dex:
           type: string
+        aggregator:
+          type: string
+          nullable: true
+          description: tx.to 命中已知聚合器 Router 时的名称
         tokenIn:
           $ref: "#/components/schemas/TokenAmount"
         tokenOut:
@@ -280,6 +300,10 @@ components:
           description: 相对已扫描块高的确认数，已回滚为 0
         watchedAddress:
           type: string
+        hops:
+          type: array
+          items:
+            $ref: "#/components/schemas/SwapHop"
     SwapPage:
       type: object
       required: [items, page, size, total]

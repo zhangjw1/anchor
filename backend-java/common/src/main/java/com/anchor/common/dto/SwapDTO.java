@@ -1,6 +1,8 @@
 package com.anchor.common.dto;
 
 import java.math.BigInteger;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * 带代币符号和精度的交换查询结果，不直接返回给接口。
@@ -14,6 +16,7 @@ public class SwapDTO {
     private Long timestampMs;
     private String direction;
     private String dex;
+    private String aggregator;
     private String tokenIn;
     private String tokenInSymbol;
     private Integer tokenInDecimals;
@@ -25,6 +28,7 @@ public class SwapDTO {
     private String confirmStatus;
     private int confirmations;
     private String watchedAddress;
+    private List<SwapHopDTO> hops = new ArrayList<>();
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
@@ -42,6 +46,8 @@ public class SwapDTO {
     public void setDirection(String direction) { this.direction = direction; }
     public String getDex() { return dex; }
     public void setDex(String dex) { this.dex = dex; }
+    public String getAggregator() { return aggregator; }
+    public void setAggregator(String aggregator) { this.aggregator = aggregator; }
     public String getTokenIn() { return tokenIn; }
     public void setTokenIn(String tokenIn) { this.tokenIn = tokenIn; }
     public String getTokenInSymbol() { return tokenInSymbol; }
@@ -64,4 +70,6 @@ public class SwapDTO {
     public void setConfirmations(int confirmations) { this.confirmations = confirmations; }
     public String getWatchedAddress() { return watchedAddress; }
     public void setWatchedAddress(String watchedAddress) { this.watchedAddress = watchedAddress; }
+    public List<SwapHopDTO> getHops() { return hops; }
+    public void setHops(List<SwapHopDTO> hops) { this.hops = hops == null ? new ArrayList<>() : hops; }
 }

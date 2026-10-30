@@ -1,10 +1,12 @@
-package com.anchor.parser.swap;
+package com.anchor.parser.service.impl;
 
 import com.anchor.common.chain.RpcGateway;
 import com.anchor.common.constant.AnchorConstants;
 import com.anchor.common.constant.RedisKeys;
 import com.anchor.common.evm.generated.UniswapV3Pool;
+import com.anchor.common.support.AbiOutputs;
 import com.anchor.common.support.Addresses;
+import com.anchor.parser.service.PoolFactoryService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -26,9 +28,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * 先查内存和 Redis，没有再调用池子的 factory()。
  */
 @Service
-public class RpcPoolFactoryLookup implements PoolFactoryLookup {
+public class PoolFactoryServiceImpl implements PoolFactoryService {
 
-    private static final Logger log = LoggerFactory.getLogger(RpcPoolFactoryLookup.class);
+    private static final Logger log = LoggerFactory.getLogger(PoolFactoryServiceImpl.class);
     private static final String CALL_DATA = FunctionEncoder.encode(new Function(
             UniswapV3Pool.FUNC_FACTORY, List.of(), Arrays.<TypeReference<?>>asList(new TypeReference<Address>() {})));
 
@@ -36,7 +38,7 @@ public class RpcPoolFactoryLookup implements PoolFactoryLookup {
     private final StringRedisTemplate redis;
     private final ConcurrentHashMap<String, String> memory = new ConcurrentHashMap<>();
 
-    public RpcPoolFactoryLookup(RpcGateway rpcGateway, StringRedisTemplate redis) {
+    public PoolFactoryServiceImpl(RpcGateway rpcGateway, StringRedisTemplate redis) {
         this.rpcGateway = rpcGateway;
         this.redis = redis;
     }
@@ -55,8 +57,7 @@ public class RpcPoolFactoryLookup implements PoolFactoryLookup {
             return Optional.of(stored);
         }
         try {
-            String raw = rpcGateway.ethCall(chainId, pool, CALL_DATA);
-            Optional<String> decoded = decodeAddress(raw);
+            Optional<String> decoded = decodeAddress(rpcGateway.ethCall(chainId, pool, CALL_DATA));
             decoded.ifPresent(factory -> {
                 memory.put(key, factory);
                 redis.opsForValue().set(redisKey, factory, Duration.ofDays(AnchorConstants.POOL_CACHE_DAYS));
@@ -69,7 +70,7 @@ public class RpcPoolFactoryLookup implements PoolFactoryLookup {
     }
 
     private static Optional<String> decodeAddress(String raw) {
-        if (raw == null || raw.length() < 66) {
+        if (raw == null || raw.length() < AnchorConstants.ABI_WORD_HEX_LENGTH) {
             return Optional.empty();
         }
         @SuppressWarnings("rawtypes")

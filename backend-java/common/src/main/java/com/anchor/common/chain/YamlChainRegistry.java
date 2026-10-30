@@ -117,7 +117,8 @@ public class YamlChainRegistry implements ChainRegistry {
                         optionalAddress(contracts.uniswapV2Factory()),
                         optionalAddress(contracts.uniswapV2Router()),
                         optionalAddress(contracts.aerodromeRouter()),
-                        optionalAddress(contracts.aerodromeFactory())),
+                        optionalAddress(contracts.aerodromeFactory()),
+                        optionalAddress(contracts.aerodromeSlipstreamFactory())),
                 Set.copyOf(quotes),
                 List.copyOf(aggregators));
     }
@@ -213,8 +214,10 @@ public class YamlChainRegistry implements ChainRegistry {
                 String uniswapV2Router,
                 /** Aerodrome Router。 */
                 String aerodromeRouter,
-                /** Aerodrome Factory。 */
-                String aerodromeFactory) {
+                /** Aerodrome 经典池 Factory。 */
+                String aerodromeFactory,
+                /** Aerodrome Slipstream Factory。 */
+                String aerodromeSlipstreamFactory) {
         }
     }
 

@@ -118,5 +118,11 @@
   },
   "poolFactories": {
     "0x5d75edb390ca5f88d58bafae5d9fcde3c622e365": "0x33128a8fc17869897dce68ed026d694621f6fdfd"
+  },
+  "poolTokens": {
+    "0x5d75edb390ca5f88d58bafae5d9fcde3c622e365": {
+      "token0": "0x00309d634d11541b857f927be91ad2f0bd78894c",
+      "token1": "0x4200000000000000000000000000000000000006"
+    }
   }
 }

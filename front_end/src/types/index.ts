@@ -16,6 +16,17 @@ export type SwapStatus =
   | { type: 'confirming'; current: number; total: number }
   | { type: 'finalized'; label: string };
 
+export interface SwapHopDetail {
+  hopIndex: number;
+  dex: string;
+  pool: string;
+  tokenIn: string;
+  tokenOut: string;
+  amountIn: number;
+  amountOut: number;
+  logIndex: number;
+}
+
 export interface SwapTransaction {
   id: string;
   txHash: string;
@@ -27,6 +38,7 @@ export interface SwapTransaction {
     isAggregator?: boolean;
     aggregatorLabel?: string;
   };
+  hopDetails?: SwapHopDetail[];
   dex: string;
   amount: string; // e.g. "+1.20 WETH" or "+240.5k DEGEN"
   rawAmount: number;

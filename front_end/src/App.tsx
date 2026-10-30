@@ -56,14 +56,47 @@ function toStatus(status: ConfirmStatus): SwapStatus {
   return { type: 'finalized', label: status === 'FINALIZED' ? '已最终确认' : '已确认' };
 }
 
+function hopPathSymbols(item: SwapDto, fromToken: string, toToken: string): string[] | undefined {
+  const hops = item.hops;
+  if (!hops || hops.length === 0) {
+    return undefined;
+  }
+  const symbols = [tokenLabel(hops[0].tokenIn.symbol, hops[0].tokenIn.address)];
+  for (const hop of hops) {
+    symbols.push(tokenLabel(hop.tokenOut.symbol, hop.tokenOut.address));
+  }
+  if (symbols.length === 2 && symbols[0] === fromToken && symbols[1] === toToken) {
+    return undefined;
+  }
+  return symbols;
+}
+
 function toSwap(item: SwapDto, names: Map<string, string>): SwapTransaction {
   const fromToken = tokenLabel(item.tokenIn.symbol, item.tokenIn.address);
   const toToken = tokenLabel(item.tokenOut.symbol, item.tokenOut.address);
+  const aggregator = item.aggregator?.trim() || undefined;
+  const hops = item.hops ?? [];
   return {
     id: item.id,
     txHash: item.txHash,
     direction: item.direction,
-    pair: { fromToken, toToken },
+    pair: {
+      fromToken,
+      toToken,
+      hops: hopPathSymbols(item, fromToken, toToken),
+      isAggregator: Boolean(aggregator),
+      aggregatorLabel: aggregator,
+    },
+    hopDetails: hops.map((hop) => ({
+      hopIndex: hop.hopIndex,
+      dex: hop.dex,
+      pool: hop.pool,
+      tokenIn: tokenLabel(hop.tokenIn.symbol, hop.tokenIn.address),
+      tokenOut: tokenLabel(hop.tokenOut.symbol, hop.tokenOut.address),
+      amountIn: humanAmount(hop.tokenIn.amount, hop.tokenIn.decimals),
+      amountOut: humanAmount(hop.tokenOut.amount, hop.tokenOut.decimals),
+      logIndex: hop.logIndex,
+    })),
     dex: item.dex,
     amount: '',
     rawAmount: humanAmount(item.tokenOut.amount, item.tokenOut.decimals),

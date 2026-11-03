@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
-import { ChevronDown, Check, Wifi, Globe, ShieldCheck } from 'lucide-react';
+import { ConnectButton } from '@rainbow-me/rainbowkit';
+import { ChevronDown, Check } from 'lucide-react';
+import { isMockMode } from '../config/env';
 import { NETWORKS } from '../mock/initialData';
 import { NetworkConfig } from '../types';
 
@@ -21,6 +23,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenAccountModal,
 }) => {
   const [networkDropdownOpen, setNetworkDropdownOpen] = useState(false);
+  const mock = isMockMode();
 
   return (
     <header className="h-14 bg-white border-b border-slate-200 px-4 md:px-6 flex items-center justify-between shrink-0 z-30 select-none">
@@ -112,28 +115,42 @@ export const Header: React.FC<HeaderProps> = ({
           <div>确认数: <span className="font-semibold text-slate-700">{confirmationTarget}</span></div>
         </div>
 
-        {/* User Avatar */}
-        <button
-          onClick={onOpenAccountModal}
-          className="relative w-8 h-8 rounded-full overflow-hidden border border-slate-200 hover:ring-2 hover:ring-blue-500/20 transition-all cursor-pointer shrink-0 shadow-xs"
-          title="查看当前账户信息"
-        >
-          {/* Avatar image matching the screenshot */}
-          <img
-            src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80"
-            alt="User avatar"
-            referrerPolicy="no-referrer"
-            className="w-full h-full object-cover"
-            onError={(e) => {
-              // Fallback to handsome SVG portrait if image doesn't load
-              e.currentTarget.style.display = 'none';
-              e.currentTarget.nextElementSibling?.classList.remove('hidden');
-            }}
-          />
-          <div className="hidden w-full h-full bg-slate-800 text-white flex items-center justify-center font-bold text-xs">
-            0x
+        {mock ? (
+          <button
+            onClick={onOpenAccountModal}
+            className="relative w-8 h-8 rounded-full overflow-hidden border border-slate-200 hover:ring-2 hover:ring-blue-500/20 transition-all cursor-pointer shrink-0 shadow-xs"
+            title="查看当前账户信息"
+          >
+            <img
+              src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80"
+              alt="User avatar"
+              referrerPolicy="no-referrer"
+              className="w-full h-full object-cover"
+              onError={(e) => {
+                e.currentTarget.style.display = 'none';
+                e.currentTarget.nextElementSibling?.classList.remove('hidden');
+              }}
+            />
+            <div className="hidden w-full h-full bg-slate-800 text-white flex items-center justify-center font-bold text-xs">
+              0x
+            </div>
+          </button>
+        ) : (
+          <div className="flex items-center gap-2">
+            <ConnectButton
+              chainStatus="icon"
+              accountStatus="address"
+              showBalance={false}
+            />
+            <button
+              onClick={onOpenAccountModal}
+              className="text-[11px] text-slate-500 hover:text-slate-800 underline-offset-2 hover:underline cursor-pointer"
+              title="账户详情"
+            >
+              账户
+            </button>
           </div>
-        </button>
+        )}
       </div>
     </header>
   );

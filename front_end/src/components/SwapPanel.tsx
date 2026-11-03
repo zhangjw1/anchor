@@ -10,10 +10,12 @@ import { TransactionSteps } from './TransactionSteps';
 interface SwapPanelProps {
   tokens: Record<string, Token>;
   onExecuteSwap: (from: string, to: string, paid: number, received: number, hash: string) => void;
+  chainId?: number;
+  live?: boolean;
 }
 
-export function SwapPanel({ tokens, onExecuteSwap }: SwapPanelProps) {
-  const swap = useSwapDemo(tokens, onExecuteSwap);
+export function SwapPanel({ tokens, onExecuteSwap, chainId, live }: SwapPanelProps) {
+  const swap = useSwapDemo(tokens, onExecuteSwap, { chainId, live });
   const [settingsOpen, setSettingsOpen] = useState(false);
   const { fromSymbol, toSymbol, fromToken, fromAmount, state, isBusy, isApproving } = swap;
   const locked = isBusy || isApproving;
@@ -61,19 +63,20 @@ export function SwapPanel({ tokens, onExecuteSwap }: SwapPanelProps) {
     <button data-testid="swap-action" disabled={disabled} onClick={swap.act} className="w-full mt-3 bg-[#0c1a30] hover:bg-[#152a4a] disabled:bg-slate-200 disabled:text-slate-500 text-white font-bold py-3 px-4 rounded-md text-sm transition-colors shadow-xs disabled:cursor-not-allowed flex items-center justify-center gap-2">
       {(quoting || locked) && <Loader2 className="w-4 h-4 animate-spin" />}<span>{buttonText}</span>
     </button>
-    {state === 'failed' && <div role="alert" className="mt-2 text-xs text-rose-700 bg-rose-50 border border-rose-200 p-2 rounded"><strong>交易失败</strong><p className="font-mono mt-1">revert: Too little received</p><p className="mt-1">收到数量低于最少收到，请调整滑点后重试。</p></div>}
+    {state === 'failed' && <div role="alert" className="mt-2 text-xs text-rose-700 bg-rose-50 border border-rose-200 p-2 rounded"><strong>{swap.live ? '报价/兑换不可用' : '交易失败'}</strong>{swap.quoteError ? <p className="mt-1">{swap.quoteError}</p> : <><p className="font-mono mt-1">revert: Too little received</p><p className="mt-1">收到数量低于最少收到，请调整滑点后重试。</p></>}</div>}
+    {swap.quoteError && state !== 'failed' && <div role="alert" className="mt-2 text-xs text-amber-800 bg-amber-50 border border-amber-200 p-2 rounded">{swap.quoteError}</div>}
     {swap.transaction && <TransactionSteps step={swap.step} hash={swap.transaction.hash} nonce={swap.transaction.nonce} />}
 
     <div className="mt-3 pt-3 border-t border-slate-100 text-xs space-y-1.5">
       <div className="flex items-center justify-between"><span className="text-slate-500">价格影响</span><span className="text-emerald-600 font-mono font-medium">{hasQuote ? `${((swap.bestRoute?.priceImpact ?? 0) * 100).toFixed(2)}%` : '—'}</span></div>
-      <div className="flex items-center justify-between"><span className="text-slate-500">预估 Gas</span><span className="font-mono text-slate-700">{hasQuote ? '~$0.02' : '—'}</span></div>
+      <div className="flex items-center justify-between"><span className="text-slate-500">预估 Gas</span><span className="font-mono text-slate-700">{hasQuote ? (swap.bestRoute?.gasEstimate ? `${swap.bestRoute.gasEstimate} gas` : '~$0.02') : '—'}</span></div>
       <button disabled={locked} onClick={() => setSettingsOpen(!settingsOpen)} className="w-full flex items-center justify-between text-slate-500 hover:text-blue-600" aria-expanded={settingsOpen} aria-label="修改滑点"><span>滑点 {swap.validSlippage ? swap.effectiveSlippage : '—'}%</span><span className="text-blue-600">点击修改</span></button>
       <div className="flex items-center justify-between gap-2"><span className="text-slate-500 shrink-0">最少收到</span><span data-testid="minimum-received" className="font-mono text-slate-700 text-right">{hasQuote && swap.validSlippage ? `${formatAmount(swap.minimumReceived, toSymbol)} ${toSymbol}` : '—'}</span></div>
-      <div className="pt-1"><div className="text-slate-500 mb-1">路由报价 <span className="text-[10px]">· mock</span></div>
+      <div className="pt-1"><div className="text-slate-500 mb-1">路由报价 <span className="text-[10px]">· {swap.live ? 'live' : 'mock'}</span></div>
         <div className="space-y-1" data-testid="route-quotes">
           {[0.01, 0.05, 0.3, 1].map((fee) => {
-            const route = swap.routes.find((item) => item.fee === fee);
-            const best = hasQuote && swap.bestRoute?.fee === fee;
+            const route = swap.routes.find((item) => Math.abs(item.fee - fee) < 1e-9);
+            const best = hasQuote && swap.bestRoute != null && Math.abs(swap.bestRoute.fee - fee) < 1e-9;
             return <div key={fee} className={`flex items-center justify-between gap-1 px-2 py-1.5 rounded border text-[10px] ${best ? 'bg-blue-50 border-blue-200 text-blue-800' : 'bg-slate-50 border-slate-100 text-slate-600'}`}>
               <span className="shrink-0">Uniswap V3 ({fee}%) {best && <span className="text-[9px] font-bold text-blue-700">最优</span>}</span>
               <span className="font-mono text-right">{hasQuote && route ? `${formatAmount(route.amount, toSymbol)} ${toSymbol}` : '—'}</span>
@@ -82,6 +85,6 @@ export function SwapPanel({ tokens, onExecuteSwap }: SwapPanelProps) {
         </div>
       </div>
     </div>
-    <DemoStatePanel state={state} onChange={swap.selectDemoState} />
+    {!swap.live && <DemoStatePanel state={state} onChange={swap.selectDemoState} />}
   </div>;
 }

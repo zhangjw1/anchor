@@ -72,6 +72,7 @@ npm run lint     # TypeScript 类型检查（tsc --noEmit）
 ## 设计文档
 
 - [`docs/backend-design.md`](docs/backend-design.md) — 目标与范围、进程拆分、数据流、模块职责、确认策略、Swap 入库 / reorg / 报价 / 授权兑换流程、多链设计、实体模型、可靠性与安全、可观测性、分阶段路线、风险与待定问题
+- [`docs/chains-yaml.md`](docs/chains-yaml.md) — `chains.yaml` 各字段含义与在系统中的用途
 
 ## Roadmap
 

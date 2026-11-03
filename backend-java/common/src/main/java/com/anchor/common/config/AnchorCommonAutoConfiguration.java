@@ -2,10 +2,14 @@ package com.anchor.common.config;
 
 import com.anchor.common.chain.AnchorSettings;
 import com.anchor.common.chain.ChainRegistry;
+import com.anchor.common.chain.Quoter;
 import com.anchor.common.chain.RpcGateway;
 import com.anchor.common.chain.YamlChainRegistry;
 import com.anchor.common.handler.BigIntegerNumericTypeHandler;
 import com.anchor.common.manager.FailoverRpcGateway;
+import com.anchor.common.manager.MulticallClient;
+import com.anchor.common.manager.PoolPriceOracle;
+import com.anchor.common.manager.UniswapV3Quoter;
 import com.baomidou.mybatisplus.annotation.DbType;
 import com.baomidou.mybatisplus.autoconfigure.ConfigurationCustomizer;
 import com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor;
@@ -42,6 +46,24 @@ public class AnchorCommonAutoConfiguration {
     public RpcGateway rpcGateway(ChainRegistry chainRegistry, ObjectProvider<MeterRegistry> meters) {
         MeterRegistry meterRegistry = meters.getIfAvailable(SimpleMeterRegistry::new);
         return new FailoverRpcGateway(chainRegistry, meterRegistry);
+    }
+
+    /** Multicall3 批量调用。 */
+    @Bean
+    public MulticallClient multicallClient(RpcGateway rpcGateway) {
+        return new MulticallClient(rpcGateway);
+    }
+
+    /** Uniswap V3 池价预言机。 */
+    @Bean
+    public PoolPriceOracle poolPriceOracle(RpcGateway rpcGateway) {
+        return new PoolPriceOracle(rpcGateway);
+    }
+
+    /** Uniswap V3 QuoterV2 报价实现。 */
+    @Bean
+    public Quoter quoter(ChainRegistry chainRegistry, RpcGateway rpcGateway, PoolPriceOracle poolPriceOracle) {
+        return new UniswapV3Quoter(chainRegistry, rpcGateway, poolPriceOracle);
     }
     /**
      * PostgreSQL 分页插件。

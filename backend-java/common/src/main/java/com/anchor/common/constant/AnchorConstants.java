@@ -89,6 +89,34 @@ public final class AnchorConstants {
     /** API 模块消费 Kafka 主题时使用的消费者组 ID。 */
     public static final String KAFKA_GROUP_API = "anchor-api";
 
+    /** Uniswap V3 报价使用的费率档（万分之一）。 */
+    public static final int[] UNISWAP_V3_FEE_TIERS = {100, 500, 3000, 10_000};
+
+    /** 资产余额与价格的 Redis 短缓存秒数。 */
+    public static final int ASSET_CACHE_SECONDS = 5;
+
+    /** 报价结果 Redis 短缓存秒数。 */
+    public static final int QUOTE_CACHE_SECONDS = 5;
+
+    /** 报价有效期（毫秒），过期后前端应重新请求。 */
+    public static final long QUOTE_TTL_MS = 15_000L;
+
+    /** 报价接口每个 IP 在窗口内允许的最大请求数。 */
+    public static final int QUOTE_RATE_LIMIT_PER_WINDOW = 30;
+
+    /** 报价限流窗口（秒）。 */
+    public static final int QUOTE_RATE_LIMIT_WINDOW_SECONDS = 60;
+
+    /** 滑点上限（基点），50% 以上拒绝。 */
+    public static final int MAX_SLIPPAGE_BPS = 5_000;
+
+    /** 认为池子流动性足够的最小 liquidity() 值；低于此值价格返回 null。 */
+    public static final long MIN_POOL_LIQUIDITY = 1_000_000_000_000L;
+
+    /** USD 展示用 6 位小数，1 美元 = 1_000_000 微美元。 */
+    public static final int USD_MICRO_DECIMALS = 6;
+
     private AnchorConstants() {
     }
 }
+

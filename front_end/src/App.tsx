@@ -8,11 +8,15 @@ import { FooterBar } from './components/FooterBar';
 import { TxDetailModal } from './components/TxDetailModal';
 import { AccountModal } from './components/AccountModal';
 import { ApiError, ConfirmStatus, SwapDto, WatchAddressDto, createWatchAddress, deleteWatchAddress, listSwaps, listWatchAddresses } from './api/anchor';
-import { INITIAL_TOKENS, NETWORKS } from './mock/initialData';
-import { WatchAddress, SwapTransaction, Token, NetworkConfig, SwapStatus } from './types';
+import { isMockMode } from './config/env';
+import { useLiveWallet } from './hooks/useLiveWallet';
+import { usePortfolioTokens } from './hooks/usePortfolioTokens';
+import { NETWORKS } from './mock/initialData';
+import { WatchAddress, SwapTransaction, NetworkConfig, SwapStatus } from './types';
 import { CONFIRMATION_TARGET } from './utils/swap';
 
 const POLL_MS = 3000;
+const MOCK_ADDRESS = '0x94A1F29b3112E849C01132890bF20c1590748920';
 
 function shortAddress(address: string) {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
@@ -114,12 +118,13 @@ function toSwap(item: SwapDto, names: Map<string, string>): SwapTransaction {
 }
 
 export default function App() {
+  const mock = isMockMode();
+  const liveWallet = useLiveWallet();
   const [network, setNetwork] = useState<NetworkConfig>(NETWORKS[0]);
   const [watchlist, setWatchlist] = useState<WatchAddress[]>([]);
   const [selectedWatchId, setSelectedWatchId] = useState<string | null>(null);
   const [swaps, setSwaps] = useState<SwapTransaction[]>([]);
-  const [tokens, setTokens] = useState<Record<string, Token>>(INITIAL_TOKENS);
-  const [userAddress, setUserAddress] = useState<string>('0x94A1F29b3112E849C01132890bF20c1590748920');
+  const [mockAddress, setMockAddress] = useState<string>(MOCK_ADDRESS);
   const [latestBlock, setLatestBlock] = useState<number>(0);
   const [isStreaming, setIsStreaming] = useState<boolean>(true);
   const [feedError, setFeedError] = useState<string | null>(null);
@@ -128,6 +133,12 @@ export default function App() {
   const [mobileTab, setMobileTab] = useState<'watch' | 'swaps' | 'swap'>('swaps');
   const selectedAddressRef = useRef<string | undefined>(undefined);
   selectedAddressRef.current = watchlist.find((item) => item.id === selectedWatchId)?.address;
+
+  const userAddress = mock ? mockAddress : (liveWallet.address || '');
+  const { tokens, setTokens, error: assetError, refresh: refreshAssets } = usePortfolioTokens(
+    network.chainId,
+    userAddress || undefined,
+  );
 
   const refreshFeed = useCallback(async (chainId: number, address?: string) => {
     const [addresses, page] = await Promise.all([
@@ -191,9 +202,8 @@ export default function App() {
     });
   };
 
-  // Faucet claim for testing
   const handleFaucet = (symbol: string, amt: number) => {
-    if (!Number.isFinite(amt) || amt <= 0) return;
+    if (!mock || !Number.isFinite(amt) || amt <= 0) return;
     setTokens((prev) => {
       const current = prev[symbol];
       if (!current) return prev;
@@ -207,9 +217,10 @@ export default function App() {
     });
   };
 
+  const bannerError = feedError || assetError;
+
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-[#f3f5f8] text-slate-800">
-      {/* Top Header */}
       <Header
         currentNetwork={network}
         onSelectNetwork={setNetwork}
@@ -219,7 +230,6 @@ export default function App() {
         onOpenAccountModal={() => setIsAccountModalOpen(true)}
       />
 
-      {/* Mobile Tab Navigation (visible only on small screens) */}
       <div className="md:hidden flex border-b border-slate-200 bg-white text-xs font-semibold">
         <button
           onClick={() => setMobileTab('watch')}
@@ -247,13 +257,16 @@ export default function App() {
         </button>
       </div>
 
-      {feedError && (
-        <div className="bg-rose-50 text-rose-700 text-xs px-4 py-2 border-b border-rose-100 shrink-0">{feedError}</div>
+      {bannerError && (
+        <div className="bg-rose-50 text-rose-700 text-xs px-4 py-2 border-b border-rose-100 shrink-0">{bannerError}</div>
+      )}
+      {!mock && !liveWallet.isConnected && (
+        <div className="bg-amber-50 text-amber-800 text-xs px-4 py-2 border-b border-amber-100 shrink-0">
+          请先连接钱包以查看真实余额与报价（VITE_USE_MOCK=false）
+        </div>
       )}
 
-      {/* Main 3-Column Dashboard Body */}
       <main className="flex-1 flex overflow-hidden">
-        {/* Left Column: Watchlist (Hidden on mobile unless selected) */}
         <section
           className={`w-full md:w-[240px] lg:w-[260px] shrink-0 border-r border-slate-200 h-full ${
             mobileTab === 'watch' ? 'flex' : 'hidden md:flex'
@@ -270,7 +283,6 @@ export default function App() {
           />
         </section>
 
-        {/* Center Column: Recent Swaps Feed */}
         <section
           className={`flex-1 h-full min-w-0 ${
             mobileTab === 'swaps' ? 'flex flex-col' : 'hidden md:flex flex-col'
@@ -286,46 +298,44 @@ export default function App() {
           />
         </section>
 
-        {/* Right Column: Balances & Swap Execution */}
         <section
           className={`w-full md:w-[320px] lg:w-[350px] shrink-0 border-l border-slate-200 flex flex-col h-full overflow-y-auto bg-white ${
             mobileTab === 'swap' ? 'flex' : 'hidden md:flex'
           }`}
         >
-          {/* Top of right: Balances */}
           <BalancesPanel
-            userAddress={userAddress}
+            userAddress={userAddress || '未连接'}
             tokens={tokens}
+            onRefreshBalances={refreshAssets}
             explorerUrl={network.explorerUrl}
           />
 
-          {/* Bottom of right: Swap Widget */}
           <SwapPanel
             tokens={tokens}
             onExecuteSwap={handleExecuteSwap}
+            chainId={network.chainId}
+            live={!mock}
           />
         </section>
       </main>
 
-      {/* Bottom Telemetry Bar */}
       <FooterBar />
 
-      {/* Deep Tx Inspector Modal */}
       <TxDetailModal
         tx={activeTx ? swaps.find((item) => item.id === activeTx.id) ?? activeTx : null}
         onClose={() => setActiveTx(null)}
         explorerUrl={network.explorerUrl}
       />
 
-      {/* Account / Faucet Modal */}
       <AccountModal
         isOpen={isAccountModalOpen}
         onClose={() => setIsAccountModalOpen(false)}
-        userAddress={userAddress}
-        onUpdateAddress={setUserAddress}
+        userAddress={userAddress || ''}
+        onUpdateAddress={setMockAddress}
         tokens={tokens}
         onFaucet={handleFaucet}
         network={network}
+        mockMode={mock}
       />
     </div>
   );

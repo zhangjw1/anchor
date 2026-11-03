@@ -100,3 +100,51 @@ export function listSwaps(chainId: number, address?: string) {
   }
   return request<SwapPageDto>(`/api/v1/swaps?${params.toString()}`);
 }
+
+export interface AssetHoldingDto {
+  token: TokenAmountDto;
+  balance: string;
+  priceUsd: string | null;
+  valueUsd: string | null;
+}
+
+export interface AssetPortfolioDto {
+  chainId: number;
+  address: string;
+  holdings: AssetHoldingDto[];
+  netWorthUsd: string | null;
+  asOfMs: number;
+}
+
+export interface QuoteRequestDto {
+  chainId: number;
+  tokenIn: string;
+  tokenOut: string;
+  amountIn: string;
+  slippageBps: number;
+}
+
+export interface QuoteDto {
+  quoteId: string;
+  chainId: number;
+  tokenIn: TokenAmountDto;
+  tokenOut: TokenAmountDto;
+  amountIn: string;
+  amountOut: string;
+  amountOutMinimum: string;
+  fee: number;
+  priceImpactBps: number;
+  gasEstimate: string;
+  l1DataFeeWei: string;
+  expiresAtMs: number;
+}
+
+export function getAssets(chainId: number, address: string, tokens?: string[]) {
+  const params = new URLSearchParams({ chainId: String(chainId), address });
+  tokens?.forEach((token) => params.append('tokens', token));
+  return request<AssetPortfolioDto>(`/api/v1/assets?${params.toString()}`);
+}
+
+export function createQuote(body: QuoteRequestDto) {
+  return request<QuoteDto>('/api/v1/quotes', { method: 'POST', body: JSON.stringify(body) });
+}

@@ -95,8 +95,20 @@ export const BalancesPanel: React.FC<BalancesPanelProps> = ({
           <span>TOTAL NET WORTH</span>
         </button>
 
-        <div data-testid="net-worth" className="text-lg font-bold font-mono text-slate-900 tracking-tight">
-          ${totalNetWorth.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        <div className="flex items-center gap-2">
+          {onRefreshBalances && (
+            <button
+              type="button"
+              onClick={() => void onRefreshBalances()}
+              className="text-[10px] text-slate-500 hover:text-blue-600 cursor-pointer"
+              title="刷新余额"
+            >
+              刷新
+            </button>
+          )}
+          <div data-testid="net-worth" className="text-lg font-bold font-mono text-slate-900 tracking-tight">
+            ${totalNetWorth.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </div>
         </div>
       </div>
     </div>

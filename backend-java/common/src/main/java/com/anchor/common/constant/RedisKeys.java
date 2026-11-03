@@ -42,4 +42,25 @@ public final class RedisKeys {
     public static String reorgDepth(long chainId) {
         return "anchor:reorg:depth:" + chainId;
     }
+
+    /**
+     * 钱包资产组合短缓存。
+     */
+    public static String assetPortfolio(long chainId, String address, String tokenFingerprint) {
+        return "anchor:asset:" + chainId + ":" + address + ":" + tokenFingerprint;
+    }
+
+    /**
+     * 报价结果短缓存。
+     */
+    public static String quote(long chainId, String tokenIn, String tokenOut, String amountIn, int slippageBps) {
+        return "anchor:quote:" + chainId + ":" + tokenIn + ":" + tokenOut + ":" + amountIn + ":" + slippageBps;
+    }
+
+    /**
+     * 报价接口按 IP 限流计数。
+     */
+    public static String quoteRateLimit(String clientIp) {
+        return "anchor:quote:rl:" + clientIp;
+    }
 }

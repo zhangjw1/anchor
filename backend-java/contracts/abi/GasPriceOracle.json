@@ -1,0 +1,16 @@
+[
+  {
+    "inputs": [{"name": "_data", "type": "bytes"}],
+    "name": "getL1Fee",
+    "outputs": [{"name": "", "type": "uint256"}],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "l1BaseFee",
+    "outputs": [{"name": "", "type": "uint256"}],
+    "stateMutability": "view",
+    "type": "function"
+  }
+]

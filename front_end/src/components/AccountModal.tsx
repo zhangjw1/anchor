@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ExternalLink, Copy, Check, Coins, ArrowRightLeft } from 'lucide-react';
+import { ExternalLink, Copy, Check, Coins } from 'lucide-react';
 import { Token, NetworkConfig } from '../types';
 
 interface AccountModalProps {
@@ -10,6 +10,8 @@ interface AccountModalProps {
   tokens: Record<string, Token>;
   onFaucet: (symbol: string, amount: number) => void;
   network: NetworkConfig;
+  /** mock 模式才显示水龙头与切换测试地址 */
+  mockMode?: boolean;
 }
 
 export const AccountModal: React.FC<AccountModalProps> = ({
@@ -20,6 +22,7 @@ export const AccountModal: React.FC<AccountModalProps> = ({
   tokens,
   onFaucet,
   network,
+  mockMode = true,
 }) => {
   const [copied, setCopied] = useState(false);
   const [customAddress, setCustomAddress] = useState(userAddress);
@@ -71,7 +74,9 @@ export const AccountModal: React.FC<AccountModalProps> = ({
           <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2">
             <div className="text-slate-500 font-medium flex items-center justify-between">
               <span>当前连接地址 ({network.shortName})</span>
-              <span className="text-emerald-600 font-medium">● 已授权</span>
+              <span className={userAddress ? 'text-emerald-600 font-medium' : 'text-amber-600 font-medium'}>
+                {userAddress ? (mockMode ? '● Mock' : '● 已连接') : '○ 未连接'}
+              </span>
             </div>
             <div className="font-mono text-slate-800 break-all bg-white p-2 rounded border border-slate-200 flex items-center justify-between gap-2">
               <span className="text-[11px]">{userAddress}</span>
@@ -102,55 +107,61 @@ export const AccountModal: React.FC<AccountModalProps> = ({
             </div>
           )}
 
-          {/* Quick Faucet test tokens */}
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-1.5 text-slate-700 font-bold">
-              <Coins className="w-3.5 h-3.5 text-amber-500" />
-              <span>测试币水龙头 (Quick Faucet)</span>
-            </div>
-            <div className="grid grid-cols-3 gap-2 pt-1">
-              <button
-                onClick={() => claimFaucet('ETH', 5)}
-                className="py-1.5 px-2 bg-slate-100 hover:bg-slate-200 rounded border border-slate-200 font-mono text-[11px] text-slate-800 transition-colors cursor-pointer"
-              >
-                +5 ETH
-              </button>
-              <button
-                onClick={() => claimFaucet('WETH', 5)}
-                className="py-1.5 px-2 bg-slate-100 hover:bg-slate-200 rounded border border-slate-200 font-mono text-[11px] text-slate-800 transition-colors cursor-pointer"
-              >
-                +5 WETH
-              </button>
-              <button
-                onClick={() => claimFaucet('USDC', 10000)}
-                className="py-1.5 px-2 bg-slate-100 hover:bg-slate-200 rounded border border-slate-200 font-mono text-[11px] text-slate-800 transition-colors cursor-pointer"
-              >
-                +10,000 USDC
-              </button>
-            </div>
-          </div>
+          {mockMode ? (
+            <>
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-1.5 text-slate-700 font-bold">
+                  <Coins className="w-3.5 h-3.5 text-amber-500" />
+                  <span>测试币水龙头 (Quick Faucet)</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 pt-1">
+                  <button
+                    onClick={() => claimFaucet('ETH', 5)}
+                    className="py-1.5 px-2 bg-slate-100 hover:bg-slate-200 rounded border border-slate-200 font-mono text-[11px] text-slate-800 transition-colors cursor-pointer"
+                  >
+                    +5 ETH
+                  </button>
+                  <button
+                    onClick={() => claimFaucet('WETH', 5)}
+                    className="py-1.5 px-2 bg-slate-100 hover:bg-slate-200 rounded border border-slate-200 font-mono text-[11px] text-slate-800 transition-colors cursor-pointer"
+                  >
+                    +5 WETH
+                  </button>
+                  <button
+                    onClick={() => claimFaucet('USDC', 10000)}
+                    className="py-1.5 px-2 bg-slate-100 hover:bg-slate-200 rounded border border-slate-200 font-mono text-[11px] text-slate-800 transition-colors cursor-pointer"
+                  >
+                    +10,000 USDC
+                  </button>
+                </div>
+              </div>
 
-          {/* Switch Wallet Form */}
-          <form onSubmit={handleSwitch} className="pt-2 border-t border-slate-100 space-y-2">
-            <label className="block text-slate-600 font-medium">
-              切换其他测试地址
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={customAddress}
-                onChange={(e) => setCustomAddress(e.target.value)}
-                placeholder="0x..."
-                className="flex-1 border border-slate-200 rounded-md px-3 py-1.5 font-mono text-xs focus:ring-1 focus:ring-blue-500 focus:outline-none"
-              />
-              <button
-                type="submit"
-                className="bg-slate-900 hover:bg-slate-800 text-white px-3 py-1.5 rounded-md font-medium text-xs cursor-pointer"
-              >
-                切换
-              </button>
-            </div>
-          </form>
+              <form onSubmit={handleSwitch} className="pt-2 border-t border-slate-100 space-y-2">
+                <label className="block text-slate-600 font-medium">
+                  切换其他测试地址
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={customAddress}
+                    onChange={(e) => setCustomAddress(e.target.value)}
+                    placeholder="0x..."
+                    className="flex-1 border border-slate-200 rounded-md px-3 py-1.5 font-mono text-xs focus:ring-1 focus:ring-blue-500 focus:outline-none"
+                  />
+                  <button
+                    type="submit"
+                    className="bg-slate-900 hover:bg-slate-800 text-white px-3 py-1.5 rounded-md font-medium text-xs cursor-pointer"
+                  >
+                    切换
+                  </button>
+                </div>
+              </form>
+            </>
+          ) : (
+            <p className="text-slate-500 pt-1 border-t border-slate-100">
+              真实模式请通过右上角 Connect 连接/切换钱包；余额来自链上资产接口。
+            </p>
+          )}
         </div>
 
         <div className="p-3 bg-slate-50 border-t border-slate-100 flex justify-end">

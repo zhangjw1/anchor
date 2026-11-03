@@ -1,4 +1,5 @@
 # 链注册表。合约地址只从这里读取。
+# 字段含义见 docs/chains-yaml.md
 # TODO（官方文档本次未核实，未写入地址）：
 # - base-sepolia 的 USDC、USDbC、Aerodrome Router/Factory
 # - 1inch、0x、KyberSwap 在 Base 上的 Router

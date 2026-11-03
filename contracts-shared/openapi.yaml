@@ -1,11 +1,11 @@
 openapi: 3.0.3
 info:
   title: Anchor API
-  version: 0.1.0
+  version: 0.2.0
   description: |
-    P1 契约：链列表、地址簿、Swap 查询。
+    链列表、地址簿、Swap 查询、资产余额与净值、Uniswap V3 报价。
     金额是最小单位整数的十进制字符串。地址在服务端以小写保存。
-    确认状态本期只会出现 CONFIRMING。
+    价格与 USD 净值在流动性不足时为 null。
 servers:
   - url: http://localhost:8080
 paths:
@@ -125,6 +125,69 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/SwapPage"
+  /api/v1/assets:
+    get:
+      operationId: getAssets
+      summary: 钱包资产余额与净值
+      description: |
+        用 Multicall3 批量查询原生币与 ERC20 余额。
+        默认包含原生币与 chains.yaml 的 quoteTokens；可用 tokens 追加其它 ERC20。
+        单价来自流动性足够的 Uniswap V3 池；不足则为 null。净值单位为 USD（6 位小数的最小单位字符串，即微美元）。
+      parameters:
+        - $ref: "#/components/parameters/chainId"
+        - name: address
+          in: query
+          required: true
+          schema:
+            type: string
+          description: 钱包地址
+        - name: tokens
+          in: query
+          schema:
+            type: array
+            items:
+              type: string
+          style: form
+          explode: true
+          description: 额外 ERC20 地址，可重复传参
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssetPortfolio"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+  /api/v1/quotes:
+    post:
+      operationId: createQuote
+      summary: Uniswap V3 单跳报价
+      description: |
+        对费率档 100/500/3000/10000 并发 eth_call QuoterV2，选 amountOut 最大者。
+        返回价格影响、按滑点计算的 amountOutMinimum、执行 Gas 与 OP Stack L1 data fee、报价有效期。
+        按客户端 IP 限流。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuoteRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Quote"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+        "429":
+          $ref: "#/components/responses/Error"
 components:
   parameters:
     chainId:
@@ -319,3 +382,99 @@ components:
         total:
           type: integer
           format: int64
+    AssetHolding:
+      type: object
+      required: [token, balance]
+      properties:
+        token:
+          $ref: "#/components/schemas/TokenAmount"
+        balance:
+          type: string
+          description: 最小单位整数余额；与 token.amount 相同，保留字段便于前端
+        priceUsd:
+          type: string
+          nullable: true
+          description: 单价，USD 的 6 位小数最小单位（微美元）；流动性不足为 null
+        valueUsd:
+          type: string
+          nullable: true
+          description: 持仓市值，微美元；价格缺失时为 null
+    AssetPortfolio:
+      type: object
+      required: [chainId, address, holdings, netWorthUsd, asOfMs]
+      properties:
+        chainId:
+          type: integer
+          format: int64
+        address:
+          type: string
+        holdings:
+          type: array
+          items:
+            $ref: "#/components/schemas/AssetHolding"
+        netWorthUsd:
+          type: string
+          nullable: true
+          description: 可计价持仓合计，微美元；全部无法计价时为 null
+        asOfMs:
+          type: integer
+          format: int64
+          description: 快照时间，毫秒
+    QuoteRequest:
+      type: object
+      required: [chainId, tokenIn, tokenOut, amountIn, slippageBps]
+      properties:
+        chainId:
+          type: integer
+          format: int64
+        tokenIn:
+          type: string
+          description: 付出代币；原生币用 0xeeee… 或 WETH
+        tokenOut:
+          type: string
+          description: 收到代币；原生币用 0xeeee… 或 WETH
+        amountIn:
+          type: string
+          description: 付出数量，最小单位整数
+        slippageBps:
+          type: integer
+          minimum: 0
+          maximum: 5000
+          description: 滑点，基点；100 = 1%
+    Quote:
+      type: object
+      required: [quoteId, chainId, tokenIn, tokenOut, amountIn, amountOut, amountOutMinimum, fee, priceImpactBps, gasEstimate, l1DataFeeWei, expiresAtMs]
+      properties:
+        quoteId:
+          type: string
+          description: 报价单号，后续构建交易时引用
+        chainId:
+          type: integer
+          format: int64
+        tokenIn:
+          $ref: "#/components/schemas/TokenAmount"
+        tokenOut:
+          $ref: "#/components/schemas/TokenAmount"
+        amountIn:
+          type: string
+        amountOut:
+          type: string
+        amountOutMinimum:
+          type: string
+          description: amountOut 按滑点折减后的最少收到量
+        fee:
+          type: integer
+          description: 选中的 Uniswap V3 费率档，如 500
+        priceImpactBps:
+          type: integer
+          description: 相对池子中间价的价格影响，基点
+        gasEstimate:
+          type: string
+          description: QuoterV2 返回的执行 gas 估算
+        l1DataFeeWei:
+          type: string
+          description: OP Stack L1 data fee，单位 wei
+        expiresAtMs:
+          type: integer
+          format: int64
+          description: 报价过期时间，毫秒

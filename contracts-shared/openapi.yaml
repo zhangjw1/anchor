@@ -111,12 +111,6 @@ paths:
             type: boolean
             default: false
           description: 为 true 时包含 REORGED 记录；默认排除
-        - name: page
-          in: query
-          schema:
-            type: integer
-            minimum: 1
-            default: 1
         - name: size
           in: query
           schema:
@@ -124,6 +118,17 @@ paths:
             minimum: 1
             maximum: 100
             default: 20
+        - name: beforeBlock
+          in: query
+          schema:
+            type: integer
+            format: int64
+          description: keyset 游标，与 beforeLogIndex 同时使用（上一页最后一条的 blockNumber）
+        - name: beforeLogIndex
+          in: query
+          schema:
+            type: integer
+          description: keyset 游标，与 beforeBlock 同时使用
       responses:
         "200":
           description: OK
@@ -440,7 +445,7 @@ components:
             $ref: "#/components/schemas/SwapHop"
     SwapPage:
       type: object
-      required: [items, page, size, total]
+      required: [items, page, size, total, hasMore]
       properties:
         items:
           type: array
@@ -448,11 +453,21 @@ components:
             $ref: "#/components/schemas/Swap"
         page:
           type: integer
+          description: 兼容字段，恒为 1；深翻页请用 nextBefore*
         size:
           type: integer
         total:
           type: integer
           format: int64
+        hasMore:
+          type: boolean
+        nextBeforeBlock:
+          type: integer
+          format: int64
+          nullable: true
+        nextBeforeLogIndex:
+          type: integer
+          nullable: true
     AssetHolding:
       type: object
       required: [token, balance]

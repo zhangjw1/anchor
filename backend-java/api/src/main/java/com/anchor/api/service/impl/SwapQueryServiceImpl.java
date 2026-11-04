@@ -1,5 +1,6 @@
 package com.anchor.api.service.impl;
 
+import com.anchor.api.service.SwapPageResult;
 import com.anchor.api.service.SwapQueryService;
 import com.anchor.common.chain.ChainRegistry;
 import com.anchor.common.constant.AnchorConstants;
@@ -13,8 +14,6 @@ import com.anchor.common.dto.SwapDTO;
 import com.anchor.common.dto.SwapHopDTO;
 import com.anchor.common.query.SwapQuery;
 import com.anchor.common.support.Addresses;
-import com.baomidou.mybatisplus.core.metadata.IPage;
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -23,7 +22,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 按链、监控地址、协议和方向查询交换，并限制分页大小。
+ * 按链、监控地址、协议和方向查询交换；使用 (block_number, log_index) keyset 翻页。
  */
 @Service
 public class SwapQueryServiceImpl implements SwapQueryService {
@@ -42,24 +41,24 @@ public class SwapQueryServiceImpl implements SwapQueryService {
     }
 
     @Override
-    public IPage<SwapDTO> list(long chainId, String address, String dex, String direction, Integer page, Integer size) {
-        return list(chainId, address, dex, direction, page, size, false, false);
-    }
-
-    @Override
-    public IPage<SwapDTO> list(long chainId, String address, String dex, String direction, Integer page, Integer size,
-                               boolean includeReorged) {
-        return list(chainId, address, dex, direction, page, size, includeReorged, false);
-    }
-
-    @Override
-    public IPage<SwapDTO> list(long chainId, String address, String dex, String direction, Integer page, Integer size,
-                               boolean includeReorged, boolean includeSeed) {
+    public SwapPageResult list(long chainId, String address, String dex, String direction, Integer size,
+                               boolean includeReorged, boolean includeSeed, Long beforeBlock, Integer beforeLogIndex) {
         chainRegistry.requireById(chainId);
+        if ((beforeBlock == null) != (beforeLogIndex == null)) {
+            throw new AnchorException("VALIDATION_ERROR", "beforeBlock 与 beforeLogIndex 需同时提供");
+        }
+        int pageSize = size == null ? AnchorConstants.DEFAULT_PAGE_SIZE : size;
+        if (pageSize < 1 || pageSize > AnchorConstants.MAX_PAGE_SIZE) {
+            throw new AnchorException("INVALID_PAGE", "分页大小超出范围");
+        }
+
         SwapQuery query = new SwapQuery();
         query.setChainId(chainId);
         query.setIncludeReorged(includeReorged);
         query.setIncludeSeed(includeSeed);
+        query.setBeforeBlockNumber(beforeBlock);
+        query.setBeforeLogIndex(beforeLogIndex);
+        query.setLimit(pageSize + 1);
         if (address != null && !address.isBlank()) {
             query.setAddress(Addresses.normalizeEvm(address));
         }
@@ -69,19 +68,28 @@ public class SwapQueryServiceImpl implements SwapQueryService {
         if (direction != null && !direction.isBlank()) {
             query.setDirection(parseDirection(direction));
         }
-        int current = page == null || page < 1 ? 1 : page;
-        int pageSize = size == null ? AnchorConstants.DEFAULT_PAGE_SIZE : size;
-        if (pageSize < 1 || pageSize > AnchorConstants.MAX_PAGE_SIZE) {
-            throw new AnchorException("INVALID_PAGE", "分页大小超出范围");
+
+        List<SwapDTO> rows = swapMapper.listByQuery(query);
+        boolean hasMore = rows.size() > pageSize;
+        if (hasMore) {
+            rows = new ArrayList<>(rows.subList(0, pageSize));
         }
-        IPage<SwapDTO> result = swapMapper.listByQuery(new Page<>(current, pageSize), query);
-        fillConfirmations(chainId, result);
-        fillHops(result);
-        return result;
+        fillConfirmations(chainId, rows);
+        fillHops(rows);
+
+        Long nextBlock = null;
+        Integer nextLog = null;
+        if (hasMore && !rows.isEmpty()) {
+            SwapDTO last = rows.getLast();
+            nextBlock = last.getBlockNumber();
+            nextLog = last.getLogIndex();
+        }
+        long total = swapMapper.countByQuery(query);
+        return new SwapPageResult(rows, pageSize, total, hasMore, nextBlock, nextLog);
     }
 
-    private void fillHops(IPage<SwapDTO> result) {
-        List<Long> ids = result.getRecords().stream().map(SwapDTO::getId).filter(id -> id != null).toList();
+    private void fillHops(List<SwapDTO> rows) {
+        List<Long> ids = rows.stream().map(SwapDTO::getId).filter(id -> id != null).toList();
         if (ids.isEmpty()) {
             return;
         }
@@ -89,14 +97,14 @@ public class SwapQueryServiceImpl implements SwapQueryService {
         for (SwapHopDTO hop : swapHopMapper.listBySwapIds(ids)) {
             bySwap.computeIfAbsent(hop.getSwapId(), key -> new ArrayList<>()).add(hop);
         }
-        for (SwapDTO row : result.getRecords()) {
+        for (SwapDTO row : rows) {
             row.setHops(bySwap.getOrDefault(row.getId(), List.of()));
         }
     }
 
-    private void fillConfirmations(long chainId, IPage<SwapDTO> result) {
+    private void fillConfirmations(long chainId, List<SwapDTO> rows) {
         Long head = checkpointMapper.getBlockNumber(chainId);
-        for (SwapDTO row : result.getRecords()) {
+        for (SwapDTO row : rows) {
             row.setConfirmations(confirmations(row, head));
         }
     }

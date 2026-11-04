@@ -3,7 +3,6 @@ package com.anchor.common.dao;
 import com.anchor.common.entity.SwapDO;
 import com.anchor.common.dto.SwapDTO;
 import com.anchor.common.query.SwapQuery;
-import com.baomidou.mybatisplus.core.metadata.IPage;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 
@@ -19,10 +18,13 @@ public interface SwapMapper {
      */
     int saveBatch(@Param("list") List<SwapDO> list);
     /**
-     * 带出代币符号和精度的分页查询。
+     * 带出代币符号和精度；配合 SwapQuery.limit / before* 做 keyset 分页。
      */
+    List<SwapDTO> listByQuery(@Param("query") SwapQuery query);
 
-    IPage<SwapDTO> listByQuery(IPage<SwapDTO> page, @Param("query") SwapQuery query);
+    /** 与 listByQuery 相同筛选条件下的总数（不含 keyset 游标）。 */
+    long countByQuery(@Param("query") SwapQuery query);
+
     /**
      * 统计一条链上的交换条数。
      */

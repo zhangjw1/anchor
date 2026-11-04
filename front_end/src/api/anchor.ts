@@ -54,6 +54,9 @@ export interface SwapPageDto {
   page: number;
   size: number;
   total: number;
+  hasMore?: boolean;
+  nextBeforeBlock?: number | null;
+  nextBeforeLogIndex?: number | null;
 }
 
 export class ApiError extends Error {

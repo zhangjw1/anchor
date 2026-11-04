@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * 按链和筛选条件分页查询交换。
+ * 按链和筛选条件分页查询交换（keyset）。
  */
 @Validated
 @RestController
@@ -20,15 +20,21 @@ public class SwapController {
     public SwapController(SwapQueryService swapQueryService) {
         this.swapQueryService = swapQueryService;
     }
+
     /**
-     * chainId 必填，地址、协议和方向可选。
+     * chainId 必填。翻页使用 beforeBlock + beforeLogIndex（上一页最后一条），不要用深 page。
      */
     @GetMapping("/api/v1/swaps")
-    public SwapPageVO swaps(@RequestParam @NotNull Long chainId, @RequestParam(required = false) String address,
-                            @RequestParam(required = false) String dex, @RequestParam(required = false) String direction,
-                            @RequestParam(required = false) Integer page, @RequestParam(required = false) Integer size,
+    public SwapPageVO swaps(@RequestParam @NotNull Long chainId,
+                            @RequestParam(required = false) String address,
+                            @RequestParam(required = false) String dex,
+                            @RequestParam(required = false) String direction,
+                            @RequestParam(required = false) Integer size,
                             @RequestParam(required = false, defaultValue = "false") boolean includeReorged,
-                            @RequestParam(required = false, defaultValue = "false") boolean includeSeed) {
-        return SwapPageVO.from(swapQueryService.list(chainId, address, dex, direction, page, size, includeReorged, includeSeed));
+                            @RequestParam(required = false, defaultValue = "false") boolean includeSeed,
+                            @RequestParam(required = false) Long beforeBlock,
+                            @RequestParam(required = false) Integer beforeLogIndex) {
+        return SwapPageVO.from(swapQueryService.list(
+                chainId, address, dex, direction, size, includeReorged, includeSeed, beforeBlock, beforeLogIndex));
     }
 }

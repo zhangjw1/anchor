@@ -27,6 +27,9 @@ public final class AnchorMetricNames {
 
     public static final String WS_CONNECTIONS = "anchor.ws.connections";
 
+    public static final String KAFKA_CONSUME_FAILURES = "anchor.kafka.consume.failures";
+    public static final String KAFKA_DLT_PUBLISHED = "anchor.kafka.dlt.published";
+
     private AnchorMetricNames() {
     }
 }

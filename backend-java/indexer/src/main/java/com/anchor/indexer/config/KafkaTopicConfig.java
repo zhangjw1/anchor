@@ -27,4 +27,14 @@ public class KafkaTopicConfig {
     public NewTopic chainEventsTopic() {
         return TopicBuilder.name(KafkaConstants.CHAIN_EVENTS).partitions(1).replicas(1).build();
     }
+
+    @Bean
+    public NewTopic swapEventsDltTopic() {
+        return TopicBuilder.name(KafkaConstants.SWAP_EVENTS_DLT).partitions(1).replicas(1).build();
+    }
+
+    @Bean
+    public NewTopic chainEventsDltTopic() {
+        return TopicBuilder.name(KafkaConstants.CHAIN_EVENTS_DLT).partitions(1).replicas(1).build();
+    }
 }

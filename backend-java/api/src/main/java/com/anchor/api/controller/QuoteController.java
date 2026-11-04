@@ -1,6 +1,7 @@
 package com.anchor.api.controller;
 
 import com.anchor.api.service.QuoteQueryService;
+import com.anchor.api.support.ClientIpResolver;
 import com.anchor.api.vo.QuoteRequestVO;
 import com.anchor.api.vo.QuoteVO;
 import com.anchor.common.domain.AnchorException;
@@ -21,9 +22,11 @@ import java.math.BigInteger;
 public class QuoteController {
 
     private final QuoteQueryService quoteQueryService;
+    private final ClientIpResolver clientIpResolver;
 
-    public QuoteController(QuoteQueryService quoteQueryService) {
+    public QuoteController(QuoteQueryService quoteQueryService, ClientIpResolver clientIpResolver) {
         this.quoteQueryService = quoteQueryService;
+        this.clientIpResolver = clientIpResolver;
     }
 
     @PostMapping("/api/v1/quotes")
@@ -35,15 +38,8 @@ public class QuoteController {
             throw new AnchorException("VALIDATION_ERROR", "amountIn 必须是整数");
         }
         QuoteQueryService.QuoteView view = quoteQueryService.quote(
-                request.chainId(), request.tokenIn(), request.tokenOut(), amountIn, request.slippageBps(), clientIp(httpRequest));
+                request.chainId(), request.tokenIn(), request.tokenOut(), amountIn, request.slippageBps(),
+                clientIpResolver.resolve(httpRequest));
         return QuoteVO.from(request.chainId(), view);
-    }
-
-    private static String clientIp(HttpServletRequest request) {
-        String forwarded = request.getHeader("X-Forwarded-For");
-        if (forwarded != null && !forwarded.isBlank()) {
-            return forwarded.split(",")[0].trim();
-        }
-        return request.getRemoteAddr();
     }
 }

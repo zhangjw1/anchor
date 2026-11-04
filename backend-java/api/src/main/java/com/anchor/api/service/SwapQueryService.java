@@ -1,27 +1,10 @@
 package com.anchor.api.service;
 
-import com.anchor.common.dto.SwapDTO;
-import com.baomidou.mybatisplus.core.metadata.IPage;
-
 /**
- * 交换记录分页查询。
+ * 交换记录分页查询（keyset）。
  */
 public interface SwapQueryService {
-    /**
-     * 校验链和方向后按条件分页。地址会规范成小写。
-     */
 
-    IPage<SwapDTO> list(long chainId, String address, String dex, String direction, Integer page, Integer size);
-
-    /**
-     * @param includeReorged 为 true 时包含已重组记录；默认 false
-     */
-    IPage<SwapDTO> list(long chainId, String address, String dex, String direction, Integer page, Integer size,
-                        boolean includeReorged);
-
-    /**
-     * @param includeSeed 为 true 时包含 0xseed 演示数据；默认 false
-     */
-    IPage<SwapDTO> list(long chainId, String address, String dex, String direction, Integer page, Integer size,
-                        boolean includeReorged, boolean includeSeed);
+    SwapPageResult list(long chainId, String address, String dex, String direction, Integer size,
+                        boolean includeReorged, boolean includeSeed, Long beforeBlock, Integer beforeLogIndex);
 }

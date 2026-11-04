@@ -6,6 +6,8 @@ public final class KafkaConstants {
 
     public static final String SWAP_EVENTS = "swap-events";
     public static final String CHAIN_EVENTS = "chain-events";
+    public static final String SWAP_EVENTS_DLT = "swap-events.DLT";
+    public static final String CHAIN_EVENTS_DLT = "chain-events.DLT";
     public static final String CONFIRMATION = "CONFIRMATION";
     public static final String REORG = "REORG";
 

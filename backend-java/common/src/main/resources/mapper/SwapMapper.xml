@@ -82,7 +82,38 @@
         <if test="query.direction != null and query.direction != ''">
             AND sw.direction = #{query.direction}
         </if>
+        <if test="query.beforeBlockNumber != null and query.beforeLogIndex != null">
+            AND (
+                sw.block_number &lt; #{query.beforeBlockNumber}
+                OR (sw.block_number = #{query.beforeBlockNumber} AND sw.log_index &lt; #{query.beforeLogIndex})
+            )
+        </if>
         ORDER BY sw.block_number DESC, sw.log_index DESC
+        <if test="query.limit != null">
+            LIMIT #{query.limit}
+        </if>
+    </select>
+
+    <select id="countByQuery" resultType="long">
+        SELECT COUNT(*)
+        FROM swap sw
+        WHERE sw.chain_id = #{query.chainId}
+        <if test="query.includeReorged == null or query.includeReorged == false">
+            AND sw.confirm_status &lt;&gt; 'REORGED'
+        </if>
+        <if test="query.includeSeed == null or query.includeSeed == false">
+            AND sw.tx_hash NOT LIKE '0xseed%'
+            AND sw.block_hash NOT LIKE '0xseed%'
+        </if>
+        <if test="query.address != null and query.address != ''">
+            AND sw.watched_address = #{query.address}
+        </if>
+        <if test="query.dex != null and query.dex != ''">
+            AND sw.dex = #{query.dex}
+        </if>
+        <if test="query.direction != null and query.direction != ''">
+            AND sw.direction = #{query.direction}
+        </if>
     </select>
 
     <select id="countByChain" resultType="long">

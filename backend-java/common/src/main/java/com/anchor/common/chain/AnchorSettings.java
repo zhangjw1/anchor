@@ -12,6 +12,7 @@ public class AnchorSettings {
     private String chainKey = "base";
     private Scanner scanner = new Scanner();
     private Reorg reorg = new Reorg();
+    private Http http = new Http();
 
     public String getChainsFile() {
         return chainsFile;
@@ -43,6 +44,14 @@ public class AnchorSettings {
 
     public void setReorg(Reorg reorg) {
         this.reorg = reorg;
+    }
+
+    public Http getHttp() {
+        return http;
+    }
+
+    public void setHttp(Http http) {
+        this.http = http;
     }
 
     /**
@@ -83,6 +92,22 @@ public class AnchorSettings {
 
         public void setHashWindow(int hashWindow) {
             this.hashWindow = hashWindow;
+        }
+    }
+
+    /**
+     * HTTP 入口相关。默认不信任客户端自带的 X-Forwarded-For，防止伪造限流键。
+     */
+    public static class Http {
+        /** 仅在前面有可信反向代理时设为 true。 */
+        private boolean trustForwardedHeaders = false;
+
+        public boolean isTrustForwardedHeaders() {
+            return trustForwardedHeaders;
+        }
+
+        public void setTrustForwardedHeaders(boolean trustForwardedHeaders) {
+            this.trustForwardedHeaders = trustForwardedHeaders;
         }
     }
 }

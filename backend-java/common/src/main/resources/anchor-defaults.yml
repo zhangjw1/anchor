@@ -52,6 +52,8 @@ anchor:
     poll-interval-ms: 2000
   reorg:
     hash-window: ${ANCHOR_REORG_HASH_WINDOW:512}
+  http:
+    trust-forwarded-headers: ${ANCHOR_TRUST_FORWARDED_HEADERS:false}
   kafka:
     enabled: true
 management:

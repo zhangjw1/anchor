@@ -43,9 +43,16 @@ public class SwapQueryServiceImpl implements SwapQueryService {
 
     @Override
     public IPage<SwapDTO> list(long chainId, String address, String dex, String direction, Integer page, Integer size) {
+        return list(chainId, address, dex, direction, page, size, false);
+    }
+
+    @Override
+    public IPage<SwapDTO> list(long chainId, String address, String dex, String direction, Integer page, Integer size,
+                               boolean includeReorged) {
         chainRegistry.requireById(chainId);
         SwapQuery query = new SwapQuery();
         query.setChainId(chainId);
+        query.setIncludeReorged(includeReorged);
         if (address != null && !address.isBlank()) {
             query.setAddress(Addresses.normalizeEvm(address));
         }

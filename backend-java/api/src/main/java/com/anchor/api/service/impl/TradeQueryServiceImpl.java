@@ -7,20 +7,21 @@ import com.anchor.common.chain.ChainDefinition;
 import com.anchor.common.chain.ChainReceipt;
 import com.anchor.common.chain.ChainRegistry;
 import com.anchor.common.chain.RpcGateway;
-import com.anchor.common.chain.Signer;
 import com.anchor.common.chain.StoredQuote;
 import com.anchor.common.chain.TxBuilder;
 import com.anchor.common.constant.AnchorConstants;
 import com.anchor.common.constant.RedisKeys;
 import com.anchor.common.domain.AnchorException;
-import com.anchor.common.domain.SignModeEnum;
 import com.anchor.common.metrics.AnchorMetricNames;
 import com.anchor.common.support.Addresses;
+import com.anchor.common.support.RevertReasons;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.web3j.abi.FunctionEncoder;
@@ -35,6 +36,7 @@ import java.math.BigInteger;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.regex.Pattern;
@@ -52,7 +54,6 @@ public class TradeQueryServiceImpl implements TradeQueryService {
     private final ChainRegistry chainRegistry;
     private final QuoteQueryService quoteQueryService;
     private final TxBuilder txBuilder;
-    private final Signer signer;
     private final RpcGateway rpcGateway;
     private final StringRedisTemplate redis;
     private final ObjectMapper objectMapper;
@@ -61,17 +62,39 @@ public class TradeQueryServiceImpl implements TradeQueryService {
     private final ExecutorService pollExecutor = Executors.newVirtualThreadPerTaskExecutor();
 
     public TradeQueryServiceImpl(ChainRegistry chainRegistry, QuoteQueryService quoteQueryService, TxBuilder txBuilder,
-                                 Signer signer, RpcGateway rpcGateway, StringRedisTemplate redis, ObjectMapper objectMapper,
+                                 RpcGateway rpcGateway, StringRedisTemplate redis, ObjectMapper objectMapper,
                                  WebSocketPushService webSocketPushService, MeterRegistry meterRegistry) {
         this.chainRegistry = chainRegistry;
         this.quoteQueryService = quoteQueryService;
         this.txBuilder = txBuilder;
-        this.signer = signer;
         this.rpcGateway = rpcGateway;
         this.redis = redis;
         this.objectMapper = objectMapper;
         this.webSocketPushService = webSocketPushService;
         this.meterRegistry = meterRegistry;
+    }
+
+    /** 进程重启后继续轮询仍为 PENDING 的交易（状态存 Redis）。 */
+    @EventListener(ApplicationReadyEvent.class)
+    public void recoverPendingPolls() {
+        long chainId = AnchorConstants.TRADE_ALLOWED_CHAIN_ID;
+        Set<String> pending = redis.opsForSet().members(RedisKeys.tradePending(chainId));
+        if (pending == null || pending.isEmpty()) {
+            return;
+        }
+        int resumed = 0;
+        for (String txHash : pending) {
+            TradeStatusView view = loadStatus(chainId, txHash);
+            if (view == null || !"PENDING".equals(view.status())) {
+                redis.opsForSet().remove(RedisKeys.tradePending(chainId), txHash);
+                continue;
+            }
+            pollExecutor.execute(() -> pollReceipt(view, view.updatedAtMs()));
+            resumed++;
+        }
+        if (resumed > 0) {
+            log.info("Recovered PENDING trade receipt polls, chainId={}, count={}", chainId, resumed);
+        }
     }
 
     @Override
@@ -85,8 +108,8 @@ public class TradeQueryServiceImpl implements TradeQueryService {
             throw new AnchorException("UNSUPPORTED", "当前链未配置 SwapRouter02");
         }
 
-        TxBuilder.UnsignedTransaction swapTx = txBuilder.buildSwap(quote, user);
-        signer.sign(swapTx, SignModeEnum.CLIENT);
+        long deadline = System.currentTimeMillis() / 1_000L + AnchorConstants.TRADE_DEADLINE_SECONDS;
+        TxBuilder.UnsignedTransaction swapTx = txBuilder.buildSwap(quote, user, deadline);
 
         boolean needsApprove = false;
         TxBuilder.UnsignedTransaction approveTx = null;
@@ -99,17 +122,18 @@ public class TradeQueryServiceImpl implements TradeQueryService {
             }
         }
 
-        BigInteger value = new BigInteger(swapTx.value());
-        BigInteger gas;
-        try {
-            rpcGateway.ethCall(quote.chainId(), user, swapTx.to(), swapTx.data(), value);
-            gas = rpcGateway.estimateGas(quote.chainId(), user, swapTx.to(), swapTx.data(), value);
-        } catch (RuntimeException ex) {
-            String reason = ex.getMessage() == null ? "simulation failed" : ex.getMessage();
-            throw new AnchorException("SIMULATION_FAILED", "兑换模拟失败: " + reason);
+        // 授权不足时模拟必然 revert，等用户 approve 后再 prepare 才做 eth_call
+        BigInteger gas = null;
+        if (!needsApprove) {
+            BigInteger value = new BigInteger(swapTx.value());
+            try {
+                rpcGateway.ethCall(quote.chainId(), user, swapTx.to(), swapTx.data(), value);
+                gas = rpcGateway.estimateGas(quote.chainId(), user, swapTx.to(), swapTx.data(), value);
+            } catch (RuntimeException ex) {
+                throw new AnchorException("SIMULATION_FAILED", "兑换模拟失败: " + RevertReasons.explain(ex));
+            }
         }
 
-        long deadline = System.currentTimeMillis() / 1_000L + AnchorConstants.TRADE_DEADLINE_SECONDS;
         return new PrepareResult(quote.quoteId(), quote.expiresAtEpochMs(), needsApprove, approveTx, swapTx, gas,
                 quote.amountOutMinimum().toString(), deadline);
     }
@@ -129,6 +153,7 @@ public class TradeQueryServiceImpl implements TradeQueryService {
         TradeStatusView view = new TradeStatusView(chainId, hash, normalizedKind, "PENDING", quoteId, user, null,
                 System.currentTimeMillis());
         saveStatus(view);
+        markPending(view.chainId(), view.txHash());
         meterRegistry.counter(AnchorMetricNames.TRADE_REPORTS, "chainId", String.valueOf(chainId), "kind", normalizedKind).increment();
         webSocketPushService.onTxUpdate(view.chainId(), view.txHash(), view.kind(), view.status(), view.quoteId(), view.revertReason());
         long reportedAt = view.updatedAtMs();
@@ -158,6 +183,7 @@ public class TradeQueryServiceImpl implements TradeQueryService {
             }
             TradeStatusView current = loadStatus(initial.chainId(), initial.txHash());
             if (current != null && !"PENDING".equals(current.status())) {
+                clearPending(initial.chainId(), initial.txHash());
                 return;
             }
             try {
@@ -168,10 +194,12 @@ public class TradeQueryServiceImpl implements TradeQueryService {
                 ChainReceipt receipt = receipts.getFirst();
                 String status = receipt.success() ? "CONFIRMED" : "FAILED";
                 String revert = receipt.success() ? null : "execution reverted";
+                // 回执路径暂用通用文案；模拟失败路径已用 Error(string) 解码
                 long now = System.currentTimeMillis();
                 TradeStatusView next = new TradeStatusView(initial.chainId(), initial.txHash(), initial.kind(), status,
                         initial.quoteId(), initial.userAddress(), revert, now);
                 saveStatus(next);
+                clearPending(initial.chainId(), initial.txHash());
                 String chainTag = String.valueOf(initial.chainId());
                 if (receipt.success()) {
                     meterRegistry.counter(AnchorMetricNames.TRADE_CONFIRMED, "chainId", chainTag, "kind", initial.kind()).increment();
@@ -187,6 +215,7 @@ public class TradeQueryServiceImpl implements TradeQueryService {
             }
         }
         log.warn("交易回执轮询超时，txHash={}", initial.txHash());
+        clearPending(initial.chainId(), initial.txHash());
     }
 
     private StoredQuote requireQuote(String quoteId) {
@@ -218,6 +247,15 @@ public class TradeQueryServiceImpl implements TradeQueryService {
             return BigInteger.ZERO;
         }
         return ((Uint256) decoded.getFirst()).getValue();
+    }
+
+    private void markPending(long chainId, String txHash) {
+        redis.opsForSet().add(RedisKeys.tradePending(chainId), txHash);
+        redis.expire(RedisKeys.tradePending(chainId), Duration.ofHours(AnchorConstants.TRADE_STATUS_TTL_HOURS));
+    }
+
+    private void clearPending(long chainId, String txHash) {
+        redis.opsForSet().remove(RedisKeys.tradePending(chainId), txHash);
     }
 
     private void saveStatus(TradeStatusView view) {

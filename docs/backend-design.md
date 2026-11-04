@@ -315,6 +315,9 @@ sequenceDiagram
 ```
 
 ### 6.4 授权 + 兑换 + 追踪（模式 A：用户钱包签名）
+
+实现侧概念梳理与 FAQ（两套 Swap、quoteId、allowance、prepare、eth_call 模拟等）见 `docs/swap-trade-flow.md`。
+
 ```mermaid
 sequenceDiagram
     participant F as 前端(wagmi)

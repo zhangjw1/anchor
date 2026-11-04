@@ -1,5 +1,7 @@
 # P5a Base Sepolia 联调清单
 
+概念与端到端流程（询价、prepare、allowance、SwapRouter、eth_call 模拟等）见 [swap-trade-flow.md](./swap-trade-flow.md)。
+
 ## 前置
 
 1. Docker：Postgres + Redis 已起（`deploy/docker-compose.yml`）。

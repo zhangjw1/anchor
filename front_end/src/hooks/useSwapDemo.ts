@@ -250,7 +250,7 @@ export function useSwapDemo(
       if (account.chainId !== TRADE_ALLOWED_CHAIN_ID) {
         await switchChainAsync({ chainId: TRADE_ALLOWED_CHAIN_ID });
       }
-      const prepared = await prepareTrade({
+      let prepared = await prepareTrade({
         quoteId: bestRoute.quoteId,
         userAddress: account.address,
         infiniteApprove: false,
@@ -274,7 +274,16 @@ export function useSwapDemo(
         if (approveStatus.status !== 'CONFIRMED') {
           throw new Error(approveStatus.revertReason || '授权交易失败');
         }
+        // 授权上链后再 prepare：此时才会做 swap eth_call 模拟并带回 gasEstimate
         setStep(1);
+        prepared = await prepareTrade({
+          quoteId: bestRoute.quoteId,
+          userAddress: account.address,
+          infiniteApprove: false,
+        });
+        if (prepared.needsApprove) {
+          throw new Error('授权后额度仍不足，请重试或提高授权数量');
+        }
       }
       const swapHash = await sendUnsigned(prepared.swapTx);
       setTransaction((prev) => (prev ? { ...prev, hash: swapHash } : prev));

@@ -66,6 +66,9 @@
         LEFT JOIN token tin ON tin.chain_id = sw.chain_id AND tin.address = sw.token_in
         LEFT JOIN token tout ON tout.chain_id = sw.chain_id AND tout.address = sw.token_out
         WHERE sw.chain_id = #{query.chainId}
+        <if test="query.includeReorged == null or query.includeReorged == false">
+            AND sw.confirm_status &lt;&gt; 'REORGED'
+        </if>
         <if test="query.address != null and query.address != ''">
             AND sw.watched_address = #{query.address}
         </if>
@@ -95,6 +98,25 @@
         SET confirm_status = #{status}, updated_by = #{actor}, updated_at = NOW()
         WHERE chain_id = #{chainId} AND tx_hash = #{txHash} AND log_index = #{logIndex}
     </update>
+
+    <!-- Postgres UPDATE ... RETURNING：只返回真正被改状态的行 -->
+    <select id="promoteToFinalized" resultType="com.anchor.common.entity.SwapDO">
+        UPDATE swap
+        SET confirm_status = 'FINALIZED', updated_by = #{actor}, updated_at = NOW()
+        WHERE chain_id = #{chainId}
+          AND confirm_status IN ('CONFIRMING', 'CONFIRMED')
+          AND block_number &lt;= #{finalizedBlock}
+        RETURNING chain_id, tx_hash, log_index, block_number, confirm_status, watched_address
+    </select>
+
+    <select id="promoteToConfirmed" resultType="com.anchor.common.entity.SwapDO">
+        UPDATE swap
+        SET confirm_status = 'CONFIRMED', updated_by = #{actor}, updated_at = NOW()
+        WHERE chain_id = #{chainId}
+          AND confirm_status = 'CONFIRMING'
+          AND block_number &lt;= #{confirmedThrough}
+        RETURNING chain_id, tx_hash, log_index, block_number, confirm_status, watched_address
+    </select>
 
     <update id="markReorgedAfter">
         UPDATE swap

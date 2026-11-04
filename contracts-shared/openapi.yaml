@@ -105,6 +105,12 @@ paths:
           in: query
           schema:
             $ref: "#/components/schemas/Direction"
+        - name: includeReorged
+          in: query
+          schema:
+            type: boolean
+            default: false
+          description: 为 true 时包含 REORGED 记录；默认排除
         - name: page
           in: query
           schema:

@@ -14,8 +14,10 @@ public interface TxBuilder {
 
     /**
      * SwapRouter02：multicall(deadline, [exactInputSingle(...)])。
+     *
+     * @param deadlineEpochSec 链上 deadline（Unix 秒），由调用方只算一次
      */
-    UnsignedTransaction buildSwap(StoredQuote quote, String recipient);
+    UnsignedTransaction buildSwap(StoredQuote quote, String recipient, long deadlineEpochSec);
 
     /**
      * 交给钱包或签名器的未签名交易。

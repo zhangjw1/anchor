@@ -1,5 +1,6 @@
 package com.anchor.indexer.service.impl;
 
+import com.anchor.common.chain.AnchorSettings;
 import com.anchor.common.chain.ChainBlock;
 import com.anchor.common.chain.ChainDefinition;
 import com.anchor.common.chain.SwapParser;
@@ -34,28 +35,39 @@ public class BlockIngestionServiceImpl implements BlockIngestionService {
     private final SwapMapper swapMapper;
     private final SwapHopMapper swapHopMapper;
     private final ConfirmationService confirmationService;
+    private final AnchorSettings settings;
 
     public BlockIngestionServiceImpl(BlockHashMapper blockHashMapper, CheckpointMapper checkpointMapper,
                                      SwapMapper swapMapper, SwapHopMapper swapHopMapper,
-                                     ConfirmationService confirmationService) {
+                                     ConfirmationService confirmationService, AnchorSettings settings) {
         this.blockHashMapper = blockHashMapper;
         this.checkpointMapper = checkpointMapper;
         this.swapMapper = swapMapper;
         this.swapHopMapper = swapHopMapper;
         this.confirmationService = confirmationService;
+        this.settings = settings;
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public BlockIngestDTO persist(ChainDefinition chain, ChainBlock block, List<SwapParser.ParsedSwap> swaps, long finalizedBlock) {
         blockHashMapper.save(chain.chainId(), block.number(), block.hash(), block.parentHash(), AnchorConstants.ACTOR_INDEXER);
-        long minKeep = block.number() - AnchorConstants.RECENT_HASH_LIMIT + 1;
-        if (minKeep > 0) {
-            blockHashMapper.deleteOlder(chain.chainId(), minKeep);
-        }
+        pruneHashes(chain.chainId(), block.number(), finalizedBlock);
         writeSwaps(chain.chainId(), swaps);
         List<ChainEventDTO> confirmations = confirmationService.apply(chain, block.number(), finalizedBlock);
         return new BlockIngestDTO(swaps, confirmations);
+    }
+
+    /**
+     * 删除窗口之外且严格低于 finalized 的哈希，保证能回溯到 finalized。
+     */
+    private void pruneHashes(long chainId, long head, long finalizedBlock) {
+        int window = Math.max(1, settings.getReorg().getHashWindow());
+        long windowKeep = head - window + 1;
+        long minKeep = finalizedBlock > 0 ? Math.min(windowKeep, finalizedBlock) : windowKeep;
+        if (minKeep > 0) {
+            blockHashMapper.deleteOlder(chainId, minKeep);
+        }
     }
 
     @Override

@@ -32,8 +32,17 @@ public final class AnchorConstants {
     /** 同一笔交易跨多个协议时的顶层 dex。 */
     public static final String DEX_MULTI = "Multi";
 
-    /** 本地 block_hash 表最多保留的最近区块数；重组回溯下限与清理旧哈希都用这个窗口。 */
-    public static final int RECENT_HASH_LIMIT = 64;
+    /**
+     * 本地 block_hash 默认保留窗口；实际以 anchor.reorg.hash-window 为准。
+     * Base finalized 常落后数百块，64 不够，默认 512。
+     */
+    public static final int RECENT_HASH_LIMIT = 512;
+
+    /** WebSocket 单次发送超时（毫秒）。 */
+    public static final int WS_SEND_TIME_LIMIT_MS = 5_000;
+
+    /** WebSocket 发送缓冲区上限（字节）。 */
+    public static final int WS_SEND_BUFFER_LIMIT_BYTES = 512 * 1024;
 
     /** 单次 RPC HTTP 调用的连接 / 读 / 调用超时（秒）。 */
     public static final int RPC_TIMEOUT_SECONDS = 10;

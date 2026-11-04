@@ -111,6 +111,55 @@ class SwapQueryIntegrationTest {
                 .andExpect(jsonPath("$.items[0].hops[0].logIndex").value(4));
     }
 
+    @Test
+    void excludesReorgedByDefault() throws Exception {
+        String address = "0x539c381c812c3882759902678832a8848419f18a";
+        mockMvc.perform(post("/api/v1/watch-addresses")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"chainId":8453,"address":"0x539c381c812c3882759902678832a8848419f18a","name":"alpha","tag":"WHALE"}
+                                """))
+                .andExpect(status().isCreated());
+
+        SwapDO live = baseSwap(address, "0xlive", ConfirmStatusEnum.CONFIRMED.name());
+        SwapDO reorged = baseSwap(address, "0xdead", ConfirmStatusEnum.REORGED.name());
+        reorged.setLogIndex(5);
+        swapMapper.saveBatch(List.of(live, reorged));
+
+        mockMvc.perform(get("/api/v1/swaps").param("chainId", "8453").param("address", address))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(1))
+                .andExpect(jsonPath("$.items[0].txHash").value("0xlive"));
+
+        mockMvc.perform(get("/api/v1/swaps").param("chainId", "8453").param("address", address)
+                        .param("includeReorged", "true"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.total").value(2));
+    }
+
+    private static SwapDO baseSwap(String address, String txHash, String status) {
+        SwapDO swap = new SwapDO();
+        swap.setChainId(8453L);
+        swap.setTxHash(txHash);
+        swap.setLogIndex(1);
+        swap.setBlockNumber(60L);
+        swap.setBlockHash("0xhash2");
+        swap.setBlockTimestamp(1_700_000_100L);
+        swap.setTxFrom(address);
+        swap.setTxTo("0x2626664c2603336e57b271c5c0b26f421741e481");
+        swap.setDex(AnchorConstants.DEX_UNISWAP_V3);
+        swap.setDirection("BUY");
+        swap.setTokenIn("0x833589fcd6edb6e08f4c7c32d4f71b54bda02913");
+        swap.setTokenOut("0x4200000000000000000000000000000000000006");
+        swap.setAmountIn(new BigInteger("1000000"));
+        swap.setAmountOut(new BigInteger("500000000000000"));
+        swap.setConfirmStatus(status);
+        swap.setWatchedAddress(address);
+        swap.setCreatedBy("test");
+        swap.setUpdatedBy("test");
+        return swap;
+    }
+
     private static SwapHopDO hop(Long swapId, SwapDO swap) {
         SwapHopDO hop = new SwapHopDO();
         hop.setSwapId(swapId);

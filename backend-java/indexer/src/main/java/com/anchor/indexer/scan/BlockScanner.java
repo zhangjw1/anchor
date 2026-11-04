@@ -13,6 +13,7 @@ import com.anchor.common.constant.AnchorConstants;
 import com.anchor.common.constant.RedisKeys;
 import com.anchor.common.dao.BlockHashMapper;
 import com.anchor.common.dao.CheckpointMapper;
+import com.anchor.common.domain.AnchorException;
 import com.anchor.common.dto.SwapEventDTO;
 import com.anchor.common.metrics.AnchorMetricNames;
 import com.anchor.indexer.service.BlockIngestionService;
@@ -22,7 +23,9 @@ import com.anchor.indexer.dto.ReorgHandleDTO;
 import com.anchor.indexer.dto.ScanStepDTO;
 import com.anchor.indexer.service.ReorgService;
 import com.anchor.parser.service.TokenMetadataService;
+import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
+import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -38,6 +41,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * 按检查点顺序扫块。父哈希对不上时先尝试重组，无法定位就暂停。
@@ -60,6 +64,7 @@ public class BlockScanner implements ChainScanner {
     private final ChainEventPublishService publisher;
     private final MeterRegistry meterRegistry;
     private final AtomicBoolean paused = new AtomicBoolean(false);
+    private final AtomicInteger pausedGauge = new AtomicInteger(0);
 
     public BlockScanner(AnchorSettings settings, ChainRegistry chainRegistry, RpcGateway rpcGateway, SwapParser swapParser,
                         BlockIngestionService ingestionService, CheckpointMapper checkpointMapper, BlockHashMapper blockHashMapper,
@@ -78,8 +83,18 @@ public class BlockScanner implements ChainScanner {
         this.publisher = publisher;
         this.meterRegistry = meterRegistry;
     }
+
+    @PostConstruct
+    void registerPausedGauge() {
+        ChainDefinition chain = chainRegistry.requireByKey(settings.getChainKey());
+        Gauge.builder(AnchorMetricNames.SCANNER_PAUSED, pausedGauge, AtomicInteger::get)
+                .description("Whether the block scanner is paused (1=paused)")
+                .tag("chainId", String.valueOf(chain.chainId()))
+                .register(meterRegistry);
+    }
+
     /**
-     * 没有检查点时从当前链头开始，不回补历史块。
+     * 没有检查点时从当前链头开始，不回补历史块。暂停时在循环内等待 resume。
      */
     @Override
     public void scanForever() {
@@ -87,7 +102,11 @@ public class BlockScanner implements ChainScanner {
         Long stored = checkpointMapper.getBlockNumber(chain.chainId());
         long next = stored == null ? -1L : stored + 1;
         log.info("开始扫描，chainId={}，检查点={}", chain.chainId(), stored);
-        while (!paused.get()) {
+        while (true) {
+            if (paused.get()) {
+                sleep(settings.getScanner().getPollIntervalMs());
+                continue;
+            }
             try {
                 if (next < 0) {
                     next = rpcGateway.latestBlockNumber(chain.chainId());
@@ -100,9 +119,12 @@ public class BlockScanner implements ChainScanner {
                 }
                 int count = (int) Math.min(AnchorConstants.CATCH_UP_CONCURRENCY, head - next + 1);
                 for (ChainBlock block : fetchRange(chain.chainId(), next, count)) {
+                    if (paused.get()) {
+                        break;
+                    }
                     ScanStepDTO step = process(chain, block);
                     if (step.kind() == ScanStepDTO.Kind.PAUSED) {
-                        return;
+                        break;
                     }
                     next = step.nextBlock();
                     if (step.kind() == ScanStepDTO.Kind.REWOUND) {
@@ -115,6 +137,26 @@ public class BlockScanner implements ChainScanner {
             }
         }
     }
+
+    @Override
+    public void resume(long chainId) {
+        ChainDefinition chain = chainRegistry.requireByKey(settings.getChainKey());
+        if (chain.chainId() != chainId) {
+            throw new AnchorException("VALIDATION_ERROR", "chainId 与本实例配置的链不一致");
+        }
+        if (!paused.compareAndSet(true, false)) {
+            log.info("扫描器未处于暂停，忽略 resume，chainId={}", chainId);
+            return;
+        }
+        pausedGauge.set(0);
+        log.info("扫描已恢复，chainId={}", chainId);
+    }
+
+    @Override
+    public boolean isPaused() {
+        return paused.get();
+    }
+
     /**
      * 解析本块中命中监控地址的交换，发布成功后才推进检查点。
      */
@@ -126,8 +168,7 @@ public class BlockScanner implements ChainScanner {
             if (parentMismatch(chain.chainId(), block)) {
                 ReorgHandleDTO outcome = reorgService.handle(chain, block);
                 if (outcome.paused()) {
-                    paused.set(true);
-                    log.error("父哈希不一致，扫描已暂停，chainId={}，区块={}，父哈希={}", chain.chainId(), block.number(), block.parentHash());
+                    markPaused(chain.chainId(), block);
                     return ScanStepDTO.paused();
                 }
                 return ScanStepDTO.rewound(outcome.nextBlock());
@@ -159,6 +200,13 @@ public class BlockScanner implements ChainScanner {
             MDC.remove("blockNumber");
             MDC.remove("txHash");
         }
+    }
+
+    private void markPaused(long chainId, ChainBlock block) {
+        paused.set(true);
+        pausedGauge.set(1);
+        log.error("父哈希不一致且无法定位祖先，扫描已暂停，请调用 POST /admin/scanner/{}/resume，chainId={}，区块={}，父哈希={}",
+                chainId, chainId, block.number(), block.parentHash());
     }
 
     private boolean parentMismatch(long chainId, ChainBlock block) {

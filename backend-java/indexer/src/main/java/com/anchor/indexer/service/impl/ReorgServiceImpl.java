@@ -4,11 +4,11 @@ import com.anchor.common.chain.AnchorSettings;
 import com.anchor.common.chain.ChainBlock;
 import com.anchor.common.chain.ChainDefinition;
 import com.anchor.common.chain.RpcGateway;
-import com.anchor.common.constant.AnchorConstants;
 import com.anchor.common.constant.RedisKeys;
 import com.anchor.common.dao.BlockHashMapper;
 import com.anchor.common.dao.CheckpointMapper;
 import com.anchor.common.dto.ChainEventDTO;
+import com.anchor.common.metrics.AnchorMetricNames;
 import com.anchor.indexer.dto.ReorgHandleDTO;
 import com.anchor.indexer.manager.ReorgManager;
 import com.anchor.indexer.service.ChainEventPublishService;
@@ -89,9 +89,9 @@ public class ReorgServiceImpl implements ReorgService {
         if (checkpoint == null) {
             return Optional.empty();
         }
-        // 允许回溯的最低高度：本地只保留最近 RECENT_HASH_LIMIT（64）个块哈希，再往前本地没有 stored 可比
-        // 例：checkpoint=104 → minKeep=104-64+1=41；candidate 低于此值则放弃并暂停
-        long minKeep = Math.max(0L, checkpoint - AnchorConstants.RECENT_HASH_LIMIT + 1);
+        // 允许回溯的最低高度：本地只保留 hash-window 个块哈希，再往前本地没有 stored 可比
+        int window = Math.max(1, settings.getReorg().getHashWindow());
+        long minKeep = Math.max(0L, checkpoint - window + 1);
         // 当前正在比对的高度，从「新块的父高度」开始往回走，例：incoming=105 → candidate 从 104 起
         long candidate = incoming.number() - 1;
         // 新主链在「candidate 这一高度」上的块哈希；初始取 incoming 的父哈希，之后每轮用 RPC 更新为更矮一层
@@ -129,8 +129,8 @@ public class ReorgServiceImpl implements ReorgService {
 
     private void recordMetrics(ReorgPlan plan) {
         String chainId = String.valueOf(plan.chainId());
-        meterRegistry.counter("chain.reorgs", "chainId", chainId).increment();
-        meterRegistry.summary("chain.reorg.depth", "chainId", chainId).record(plan.depth());
+        meterRegistry.counter(AnchorMetricNames.CHAIN_REORGS, "chainId", chainId).increment();
+        meterRegistry.summary(AnchorMetricNames.CHAIN_REORG_DEPTH, "chainId", chainId).record(plan.depth());
         redis.opsForValue().increment(RedisKeys.reorgCount(plan.chainId()));
         redis.opsForValue().set(RedisKeys.reorgDepth(plan.chainId()), String.valueOf(plan.depth()));
     }

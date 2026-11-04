@@ -50,6 +50,8 @@ anchor:
   chain-key: ${ANCHOR_CHAIN_KEY:base}
   scanner:
     poll-interval-ms: 2000
+  reorg:
+    hash-window: ${ANCHOR_REORG_HASH_WINDOW:512}
   kafka:
     enabled: true
 management:

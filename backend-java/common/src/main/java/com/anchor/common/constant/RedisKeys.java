@@ -72,6 +72,13 @@ public final class RedisKeys {
     }
 
     /**
+     * 仍在轮询回执的交易哈希集合（值为小写 txHash）。
+     */
+    public static String tradePending(long chainId) {
+        return "anchor:trade:pending:" + chainId;
+    }
+
+    /**
      * 报价接口按 IP 限流计数。
      */
     public static String quoteRateLimit(String clientIp) {

@@ -12,4 +12,10 @@ public interface SwapQueryService {
      */
 
     IPage<SwapDTO> list(long chainId, String address, String dex, String direction, Integer page, Integer size);
+
+    /**
+     * @param includeReorged 为 true 时包含已重组记录；默认 false
+     */
+    IPage<SwapDTO> list(long chainId, String address, String dex, String direction, Integer page, Integer size,
+                        boolean includeReorged);
 }

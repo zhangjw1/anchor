@@ -30,13 +30,25 @@ public interface SwapMapper {
     /**
      * 取出尚未重组、且不超过当前链头的交换，用于推进确认状态。
      */
-
     List<SwapDO> listActive(@Param("chainId") long chainId, @Param("head") long head);
+
     /**
      * 更新单笔交换的确认状态。
      */
     int updateStatus(@Param("chainId") long chainId, @Param("txHash") String txHash, @Param("logIndex") int logIndex,
                      @Param("status") String status, @Param("actor") String actor);
+
+    /**
+     * 批量把已进入 finalized 高度的 CONFIRMING/CONFIRMED 标成 FINALIZED，返回变更行。
+     */
+    List<SwapDO> promoteToFinalized(@Param("chainId") long chainId, @Param("finalizedBlock") long finalizedBlock,
+                                    @Param("actor") String actor);
+
+    /**
+     * 批量把确认数达标的 CONFIRMING 标成 CONFIRMED，返回变更行。
+     */
+    List<SwapDO> promoteToConfirmed(@Param("chainId") long chainId, @Param("confirmedThrough") long confirmedThrough,
+                                    @Param("actor") String actor);
 
     /**
      * 把分叉点之后的交换标成已重组，不物理删除。

@@ -11,6 +11,7 @@ public class AnchorSettings {
     private String chainsFile;
     private String chainKey = "base";
     private Scanner scanner = new Scanner();
+    private Reorg reorg = new Reorg();
 
     public String getChainsFile() {
         return chainsFile;
@@ -35,6 +36,15 @@ public class AnchorSettings {
     public void setScanner(Scanner scanner) {
         this.scanner = scanner;
     }
+
+    public Reorg getReorg() {
+        return reorg;
+    }
+
+    public void setReorg(Reorg reorg) {
+        this.reorg = reorg;
+    }
+
     /**
      * 扫描器开关和轮询间隔。
      */
@@ -57,6 +67,22 @@ public class AnchorSettings {
 
         public void setPollIntervalMs(long pollIntervalMs) {
             this.pollIntervalMs = pollIntervalMs;
+        }
+    }
+
+    /**
+     * 重组相关：本地区块哈希保留窗口。
+     */
+    public static class Reorg {
+        /** 至少保留的最近区块哈希数量；且不会删掉 finalized 及之后的哈希。 */
+        private int hashWindow = 512;
+
+        public int getHashWindow() {
+            return hashWindow;
+        }
+
+        public void setHashWindow(int hashWindow) {
+            this.hashWindow = hashWindow;
         }
     }
 }

@@ -12,6 +12,10 @@ public final class AnchorMetricNames {
     public static final String INDEXER_BLOCKS = "anchor.indexer.blocks";
     public static final String INDEXER_SWAPS = "anchor.indexer.swaps";
     public static final String INDEXER_PARSE_FAILURES = "anchor.indexer.parse.failures";
+    /** 扫描器是否因重组无法定位祖先而暂停（0/1）。 */
+    public static final String SCANNER_PAUSED = "anchor.scanner.paused";
+    public static final String CHAIN_REORGS = "chain.reorgs";
+    public static final String CHAIN_REORG_DEPTH = "chain.reorg.depth";
 
     public static final String QUOTE_LATENCY = "anchor.quote.latency";
     public static final String QUOTE_FAILURES = "anchor.quote.failures";

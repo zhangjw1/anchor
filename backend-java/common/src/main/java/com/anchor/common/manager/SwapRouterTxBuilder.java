@@ -4,7 +4,6 @@ import com.anchor.common.chain.ChainDefinition;
 import com.anchor.common.chain.ChainRegistry;
 import com.anchor.common.chain.StoredQuote;
 import com.anchor.common.chain.TxBuilder;
-import com.anchor.common.constant.AnchorConstants;
 import com.anchor.common.domain.AnchorException;
 import com.anchor.common.support.Addresses;
 import org.web3j.abi.FunctionEncoder;
@@ -45,19 +44,19 @@ public class SwapRouterTxBuilder implements TxBuilder {
     }
 
     @Override
-    public UnsignedTransaction buildSwap(StoredQuote quote, String recipient) {
+    public UnsignedTransaction buildSwap(StoredQuote quote, String recipient, long deadlineEpochSec) {
         ChainDefinition chain = chainRegistry.requireById(quote.chainId());
         String router = chain.contracts().swapRouter02();
         if (router == null || router.isBlank()) {
             throw new AnchorException("UNSUPPORTED", "当前链未配置 SwapRouter02");
         }
-        long deadline = System.currentTimeMillis() / 1_000L + AnchorConstants.TRADE_DEADLINE_SECONDS;
         byte[] inner = Numeric.hexStringToByteArray(encodeExactInputSingle(
                 quote.tokenIn(), quote.tokenOut(), quote.fee(), Addresses.lower(recipient),
                 quote.amountIn(), quote.amountOutMinimum()));
         Function multicall = new Function(
                 "multicall",
-                Arrays.asList(new Uint256(BigInteger.valueOf(deadline)), new DynamicArray<>(DynamicBytes.class, List.of(new DynamicBytes(inner)))),
+                Arrays.asList(new Uint256(BigInteger.valueOf(deadlineEpochSec)),
+                        new DynamicArray<>(DynamicBytes.class, List.of(new DynamicBytes(inner)))),
                 Arrays.<TypeReference<?>>asList(new TypeReference<DynamicArray<DynamicBytes>>() {}));
         String value = quote.nativeIn() ? quote.amountIn().toString() : "0";
         return new UnsignedTransaction(quote.chainId(), Addresses.lower(router), FunctionEncoder.encode(multicall), value);

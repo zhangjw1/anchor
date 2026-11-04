@@ -43,6 +43,8 @@ export interface SwapDto {
   tokenIn: TokenAmountDto;
   tokenOut: TokenAmountDto;
   confirmStatus: ConfirmStatus;
+  /** 相对当前头块的确认数；CONFIRMING 时用于进度条 */
+  confirmations?: number;
   watchedAddress: string;
   hops?: SwapHopDto[];
 }
@@ -99,6 +101,23 @@ export function listSwaps(chainId: number, address?: string) {
     params.set('address', address);
   }
   return request<SwapPageDto>(`/api/v1/swaps?${params.toString()}`);
+}
+
+export interface ChainMetricsDto {
+  chainId: number;
+  headBlock: number;
+  processedBlock: number;
+  lagBlocks: number;
+  rpcQps: number;
+  rpcErrorRate: number;
+  kafkaLag: number | null;
+  reorgCount: number;
+  reorgDepth: number;
+}
+
+/** WS 不可用时轮询状态栏指标。 */
+export function fetchChainMetrics(chainId: number) {
+  return request<ChainMetricsDto>(`/api/v1/chains/${chainId}/metrics`);
 }
 
 export interface AssetHoldingDto {

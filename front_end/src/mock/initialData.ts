@@ -59,7 +59,11 @@ export const INITIAL_SWAPS: SwapTransaction[] = MOCK_SWAP_SPECS.map((spec, index
     rawAmount: spec.received,
     amountToken: spec.to,
     paidAmount: spec.paid,
-    status: spec.reorg ? { type: 'reorg', label: '已回滚 reorg' } : spec.confirmations ? { type: 'confirming', current: spec.confirmations, total: CONFIRMATION_TARGET } : { type: 'finalized', label: '已确认' },
+    status: spec.reorg
+      ? { type: 'reorg', label: '已回滚 reorg' }
+      : spec.confirmations
+        ? { type: 'confirming', current: spec.confirmations, total: CONFIRMATION_TARGET }
+        : { type: 'confirmed', label: '已确认' },
     timestamp: MOCK_NOW - spec.secondsAgo * 1000,
     senderAddress: wallet.address,
     recipientAddress: wallet.address,
@@ -77,6 +81,7 @@ export const NETWORKS: NetworkConfig[] = [
     shortName: 'Base',
     chainId: 8453,
     blockTimeSec: 2,
+    confirmationBlocks: 10,
     explorerUrl: 'https://basescan.org',
   },
   {
@@ -85,6 +90,7 @@ export const NETWORKS: NetworkConfig[] = [
     shortName: 'Sepolia',
     chainId: 84532,
     blockTimeSec: 2,
+    confirmationBlocks: 5,
     explorerUrl: 'https://sepolia.basescan.org',
   },
   {
@@ -93,6 +99,7 @@ export const NETWORKS: NetworkConfig[] = [
     shortName: 'ETH',
     chainId: 1,
     blockTimeSec: 12,
+    confirmationBlocks: 12,
     explorerUrl: 'https://etherscan.io',
   },
   {
@@ -101,6 +108,7 @@ export const NETWORKS: NetworkConfig[] = [
     shortName: 'Arbitrum',
     chainId: 42161,
     blockTimeSec: 0.25,
+    confirmationBlocks: 20,
     explorerUrl: 'https://arbiscan.io',
   },
 ];

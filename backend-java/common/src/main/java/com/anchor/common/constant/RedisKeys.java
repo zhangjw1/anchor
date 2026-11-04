@@ -79,6 +79,13 @@ public final class RedisKeys {
     }
 
     /**
+     * 扫块选主锁；value 为持有者实例 ID。
+     */
+    public static String scannerLock(long chainId) {
+        return "anchor:scanner:lock:" + chainId;
+    }
+
+    /**
      * 报价接口按 IP 限流计数。
      */
     public static String quoteRateLimit(String clientIp) {

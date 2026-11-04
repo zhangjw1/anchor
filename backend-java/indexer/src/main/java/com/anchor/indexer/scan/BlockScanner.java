@@ -63,13 +63,14 @@ public class BlockScanner implements ChainScanner {
     private final ReorgService reorgService;
     private final ChainEventPublishService publisher;
     private final MeterRegistry meterRegistry;
+    private final ScannerLease scannerLease;
     private final AtomicBoolean paused = new AtomicBoolean(false);
     private final AtomicInteger pausedGauge = new AtomicInteger(0);
 
     public BlockScanner(AnchorSettings settings, ChainRegistry chainRegistry, RpcGateway rpcGateway, SwapParser swapParser,
                         BlockIngestionService ingestionService, CheckpointMapper checkpointMapper, BlockHashMapper blockHashMapper,
                         StringRedisTemplate redis, TokenMetadataService tokenMetadataService, ReorgService reorgService,
-                        ChainEventPublishService publisher, MeterRegistry meterRegistry) {
+                        ChainEventPublishService publisher, MeterRegistry meterRegistry, ScannerLease scannerLease) {
         this.settings = settings;
         this.chainRegistry = chainRegistry;
         this.rpcGateway = rpcGateway;
@@ -82,6 +83,7 @@ public class BlockScanner implements ChainScanner {
         this.reorgService = reorgService;
         this.publisher = publisher;
         this.meterRegistry = meterRegistry;
+        this.scannerLease = scannerLease;
     }
 
     @PostConstruct
@@ -102,39 +104,51 @@ public class BlockScanner implements ChainScanner {
         Long stored = checkpointMapper.getBlockNumber(chain.chainId());
         long next = stored == null ? -1L : stored + 1;
         log.info("开始扫描，chainId={}，检查点={}", chain.chainId(), stored);
-        while (true) {
-            if (paused.get()) {
-                sleep(settings.getScanner().getPollIntervalMs());
-                continue;
-            }
-            try {
-                if (next < 0) {
-                    next = rpcGateway.latestBlockNumber(chain.chainId());
-                    log.info("没有检查点，从链头开始，chainId={}，区块={}", chain.chainId(), next);
-                }
-                long head = rpcGateway.latestBlockNumber(chain.chainId());
-                if (next > head) {
+        try {
+            while (true) {
+                if (!scannerLease.tryAcquire(chain.chainId())) {
+                    log.warn("未拿到扫块锁，等待中，chainId={}，owner候选={}", chain.chainId(), scannerLease.ownerId());
                     sleep(settings.getScanner().getPollIntervalMs());
                     continue;
                 }
-                int count = (int) Math.min(AnchorConstants.CATCH_UP_CONCURRENCY, head - next + 1);
-                for (ChainBlock block : fetchRange(chain.chainId(), next, count)) {
-                    if (paused.get()) {
-                        break;
-                    }
-                    ScanStepDTO step = process(chain, block);
-                    if (step.kind() == ScanStepDTO.Kind.PAUSED) {
-                        break;
-                    }
-                    next = step.nextBlock();
-                    if (step.kind() == ScanStepDTO.Kind.REWOUND) {
-                        break;
-                    }
+                if (paused.get()) {
+                    scannerLease.renewIfDue(chain.chainId());
+                    sleep(settings.getScanner().getPollIntervalMs());
+                    continue;
                 }
-            } catch (RuntimeException ex) {
-                log.error("扫描失败，chainId={}，区块={}", chain.chainId(), next, ex);
-                sleep(settings.getScanner().getPollIntervalMs());
+                try {
+                    if (next < 0) {
+                        next = rpcGateway.latestBlockNumber(chain.chainId());
+                        log.info("没有检查点，从链头开始，chainId={}，区块={}", chain.chainId(), next);
+                    }
+                    long head = rpcGateway.latestBlockNumber(chain.chainId());
+                    if (next > head) {
+                        scannerLease.renewIfDue(chain.chainId());
+                        sleep(settings.getScanner().getPollIntervalMs());
+                        continue;
+                    }
+                    int count = (int) Math.min(AnchorConstants.CATCH_UP_CONCURRENCY, head - next + 1);
+                    for (ChainBlock block : fetchRange(chain.chainId(), next, count)) {
+                        if (paused.get() || !scannerLease.isHeldBySelf(chain.chainId())) {
+                            break;
+                        }
+                        scannerLease.renewIfDue(chain.chainId());
+                        ScanStepDTO step = process(chain, block);
+                        if (step.kind() == ScanStepDTO.Kind.PAUSED) {
+                            break;
+                        }
+                        next = step.nextBlock();
+                        if (step.kind() == ScanStepDTO.Kind.REWOUND) {
+                            break;
+                        }
+                    }
+                } catch (RuntimeException ex) {
+                    log.error("扫描失败，chainId={}，区块={}", chain.chainId(), next, ex);
+                    sleep(settings.getScanner().getPollIntervalMs());
+                }
             }
+        } finally {
+            scannerLease.release(chain.chainId());
         }
     }
 
@@ -175,10 +189,14 @@ public class BlockScanner implements ChainScanner {
             }
             // 获取区块里匹配的监控地址的交易，解析交换事件
             List<SwapParser.ParsedSwap> swaps = parseMatched(chain, block);
-            //记录所有在区块里出现的币种信息
-            for (SwapParser.ParsedSwap swap : swaps) {
-                tokenMetadataService.ensure(chain, swap.tokenIn());
-                tokenMetadataService.ensure(chain, swap.tokenOut());
+            // 本块涉及代币元数据一次性补齐（Multicall）
+            if (!swaps.isEmpty()) {
+                List<String> tokens = new ArrayList<>(swaps.size() * 2);
+                for (SwapParser.ParsedSwap swap : swaps) {
+                    tokens.add(swap.tokenIn());
+                    tokens.add(swap.tokenOut());
+                }
+                tokenMetadataService.ensureAll(chain, tokens);
             }
             // 获取执行层/共识层 确认的最新区块高度(这个高度之前的区块永远不会再被重组)
             long finalized = rpcGateway.finalizedBlockNumber(chain.chainId());

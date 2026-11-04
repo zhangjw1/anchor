@@ -7,7 +7,7 @@ import { SwapPanel } from './components/SwapPanel';
 import { FooterBar } from './components/FooterBar';
 import { TxDetailModal } from './components/TxDetailModal';
 import { AccountModal } from './components/AccountModal';
-import { ApiError, ConfirmStatus, SwapDto, WatchAddressDto, createWatchAddress, deleteWatchAddress, listSwaps, listWatchAddresses } from './api/anchor';
+import { ApiError, SwapDto, WatchAddressDto, createWatchAddress, deleteWatchAddress, listSwaps, listWatchAddresses } from './api/anchor';
 import { isMockMode } from './config/env';
 import { useLiveWallet } from './hooks/useLiveWallet';
 import { usePortfolioTokens } from './hooks/usePortfolioTokens';
@@ -15,8 +15,6 @@ import { useChainMetrics } from './hooks/useChainMetrics';
 import { isWagmiChain } from './config/wagmi';
 import { NETWORKS, selectableNetworks } from './mock/initialData';
 import { WatchAddress, SwapTransaction, NetworkConfig, SwapStatus } from './types';
-import { CONFIRMATION_TARGET } from './utils/swap';
-
 const POLL_MS = 3000;
 const MOCK_ADDRESS = '0x94A1F29b3112E849C01132890bF20c1590748920';
 
@@ -56,14 +54,18 @@ function toWatch(item: WatchAddressDto): WatchAddress {
   };
 }
 
-function toStatus(status: ConfirmStatus): SwapStatus {
-  if (status === 'REORGED') {
+function toStatus(item: SwapDto, confirmationBlocks: number): SwapStatus {
+  if (item.confirmStatus === 'REORGED') {
     return { type: 'reorg', label: '已回滚 reorg' };
   }
-  if (status === 'CONFIRMING') {
-    return { type: 'confirming', current: 0, total: 0 };
+  if (item.confirmStatus === 'CONFIRMING') {
+    const current = Math.max(0, item.confirmations ?? 0);
+    return { type: 'confirming', current, total: confirmationBlocks };
   }
-  return { type: 'finalized', label: status === 'FINALIZED' ? '已最终确认' : '已确认' };
+  if (item.confirmStatus === 'FINALIZED') {
+    return { type: 'finalized', label: '已最终确认' };
+  }
+  return { type: 'confirmed', label: '已确认' };
 }
 
 function hopPathSymbols(item: SwapDto, fromToken: string, toToken: string): string[] | undefined {
@@ -81,7 +83,7 @@ function hopPathSymbols(item: SwapDto, fromToken: string, toToken: string): stri
   return symbols;
 }
 
-function toSwap(item: SwapDto, names: Map<string, string>): SwapTransaction {
+function toSwap(item: SwapDto, names: Map<string, string>, confirmationBlocks: number): SwapTransaction {
   const fromToken = tokenLabel(item.tokenIn.symbol, item.tokenIn.address);
   const toToken = tokenLabel(item.tokenOut.symbol, item.tokenOut.address);
   const aggregator = item.aggregator?.trim() || undefined;
@@ -112,7 +114,7 @@ function toSwap(item: SwapDto, names: Map<string, string>): SwapTransaction {
     rawAmount: humanAmount(item.tokenOut.amount, item.tokenOut.decimals),
     amountToken: toToken,
     paidAmount: humanAmount(item.tokenIn.amount, item.tokenIn.decimals),
-    status: toStatus(item.confirmStatus),
+    status: toStatus(item, confirmationBlocks),
     timestamp: item.timestamp,
     senderAddress: item.watchedAddress,
     recipientAddress: item.watchedAddress,
@@ -140,7 +142,6 @@ export default function App() {
   const [selectedWatchId, setSelectedWatchId] = useState<string | null>(null);
   const [swaps, setSwaps] = useState<SwapTransaction[]>([]);
   const [mockAddress, setMockAddress] = useState<string>(MOCK_ADDRESS);
-  const [latestBlock, setLatestBlock] = useState<number>(0);
   const [isStreaming, setIsStreaming] = useState<boolean>(true);
   const [feedError, setFeedError] = useState<string | null>(null);
   const [activeTx, setActiveTx] = useState<SwapTransaction | null>(null);
@@ -156,22 +157,21 @@ export default function App() {
     userAddress || undefined,
   );
 
-  const refreshFeed = useCallback(async (chainId: number, address?: string) => {
+  const refreshFeed = useCallback(async (chainId: number, confirmationBlocks: number, address?: string) => {
     const [addresses, page] = await Promise.all([
       listWatchAddresses(chainId),
       listSwaps(chainId, address),
     ]);
     const names = new Map(addresses.map((item) => [item.address, item.name || shortAddress(item.address)]));
     setWatchlist(addresses.map(toWatch));
-    setSwaps(page.items.map((item) => toSwap(item, names)));
-    setLatestBlock(page.items.reduce((max, item) => Math.max(max, item.blockNumber), 0));
+    setSwaps(page.items.map((item) => toSwap(item, names, confirmationBlocks)));
     setFeedError(null);
   }, []);
 
   useEffect(() => {
     let cancelled = false;
     const load = () => {
-      refreshFeed(network.chainId, selectedAddressRef.current).catch((error: unknown) => {
+      refreshFeed(network.chainId, network.confirmationBlocks, selectedAddressRef.current).catch((error: unknown) => {
         if (!cancelled) {
           setFeedError(error instanceof ApiError ? error.message : '地址簿或成交列表加载失败');
         }
@@ -188,12 +188,12 @@ export default function App() {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [isStreaming, network.chainId, refreshFeed, selectedWatchId]);
+  }, [isStreaming, network.chainId, network.confirmationBlocks, refreshFeed, selectedWatchId]);
 
   const handleAddWatchAddress = async (address: string, name?: string, tag: WatchAddress['tag'] = 'WATCH') => {
     await createWatchAddress({ chainId: network.chainId, address, name, tag });
     const selected = watchlist.find((item) => item.id === selectedWatchId);
-    await refreshFeed(network.chainId, selected?.address);
+    await refreshFeed(network.chainId, network.confirmationBlocks, selected?.address);
   };
 
   const handleDeleteWatchAddress = async (id: string) => {
@@ -201,7 +201,7 @@ export default function App() {
     if (selectedWatchId === id) {
       setSelectedWatchId(null);
     }
-    await refreshFeed(network.chainId);
+    await refreshFeed(network.chainId, network.confirmationBlocks);
   };
 
   const handleExecuteSwap = (fromToken: string, toToken: string, fromAmt: number, toAmt: number, hash: string) => {
@@ -241,7 +241,7 @@ export default function App() {
         currentNetwork={network}
         onSelectNetwork={setNetwork}
         behindBlocks={chainMetrics.lagBlocks}
-        confirmationTarget={CONFIRMATION_TARGET}
+        confirmationTarget={network.confirmationBlocks}
         isSyncing={isStreaming}
         onOpenAccountModal={() => setIsAccountModalOpen(true)}
       />
@@ -307,7 +307,8 @@ export default function App() {
           <RecentSwapsPanel
             swaps={swaps}
             onSelectTx={setActiveTx}
-            latestBlock={chainMetrics.headBlock || latestBlock}
+            headBlock={chainMetrics.headBlock}
+            processedBlock={chainMetrics.processedBlock}
             isStreaming={isStreaming}
             onToggleStreaming={() => setIsStreaming(!isStreaming)}
             explorerUrl={network.explorerUrl}

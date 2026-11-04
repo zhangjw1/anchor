@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { fetchChainMetrics } from '../api/anchor';
 
 export interface ChainMetrics {
   headBlock: number;
@@ -24,6 +25,8 @@ const EMPTY: ChainMetrics = {
   connected: false,
 };
 
+const REST_POLL_MS = 3_000;
+
 function wsUrl(): string {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   return `${protocol}//${window.location.host}/ws`;
@@ -34,23 +37,51 @@ function num(value: unknown, fallback = 0): number {
   return Number.isFinite(n) ? n : fallback;
 }
 
+function fromPayload(payload: Record<string, unknown>, connected: boolean): ChainMetrics {
+  return {
+    headBlock: num(payload.headBlock),
+    processedBlock: num(payload.processedBlock ?? payload.blockNumber),
+    lagBlocks: num(payload.lagBlocks),
+    rpcQps: num(payload.rpcQps),
+    rpcErrorRate: num(payload.rpcErrorRate),
+    kafkaLag: payload.kafkaLag == null ? null : num(payload.kafkaLag),
+    reorgCount: num(payload.reorgCount),
+    reorgDepth: num(payload.reorgDepth),
+    connected,
+  };
+}
+
 /**
- * 订阅后端 METRICS 频道，驱动 Header 落后块数与 Footer 状态栏。
+ * 订阅后端 METRICS；WS 断开时用 REST 兜底，保证头块/已扫与列表同源。
  */
 export function useChainMetrics(chainId: number, enabled: boolean): ChainMetrics {
   const [metrics, setMetrics] = useState<ChainMetrics>(EMPTY);
   const chainIdRef = useRef(chainId);
+  const wsConnectedRef = useRef(false);
   chainIdRef.current = chainId;
 
   useEffect(() => {
     if (!enabled) {
       setMetrics(EMPTY);
+      wsConnectedRef.current = false;
       return;
     }
     let closed = false;
     let socket: WebSocket | null = null;
     let retryTimer: number | undefined;
-    let pingTimer: number | undefined;
+    let restTimer: number | undefined;
+
+    const applyRest = async () => {
+      try {
+        const view = await fetchChainMetrics(chainIdRef.current);
+        if (closed || wsConnectedRef.current) {
+          return;
+        }
+        setMetrics(fromPayload(view as unknown as Record<string, unknown>, false));
+      } catch {
+        // ignore transient REST failures
+      }
+    };
 
     const connect = () => {
       socket = new WebSocket(wsUrl());
@@ -58,6 +89,7 @@ export function useChainMetrics(chainId: number, enabled: boolean): ChainMetrics
         if (closed) {
           return;
         }
+        wsConnectedRef.current = true;
         setMetrics((prev) => ({ ...prev, connected: true }));
         socket?.send(JSON.stringify({
           action: 'subscribe',
@@ -75,17 +107,8 @@ export function useChainMetrics(chainId: number, enabled: boolean): ChainMetrics
           if (payload.type !== 'METRICS' || Number(payload.chainId) !== chainIdRef.current) {
             return;
           }
-          setMetrics({
-            headBlock: num(payload.headBlock),
-            processedBlock: num(payload.processedBlock ?? payload.blockNumber),
-            lagBlocks: num(payload.lagBlocks),
-            rpcQps: num(payload.rpcQps),
-            rpcErrorRate: num(payload.rpcErrorRate),
-            kafkaLag: payload.kafkaLag == null ? null : num(payload.kafkaLag),
-            reorgCount: num(payload.reorgCount),
-            reorgDepth: num(payload.reorgDepth),
-            connected: true,
-          });
+          wsConnectedRef.current = true;
+          setMetrics(fromPayload(payload, true));
         } catch {
           // ignore malformed frames
         }
@@ -94,7 +117,9 @@ export function useChainMetrics(chainId: number, enabled: boolean): ChainMetrics
         if (closed) {
           return;
         }
+        wsConnectedRef.current = false;
         setMetrics((prev) => ({ ...prev, connected: false }));
+        void applyRest();
         retryTimer = window.setTimeout(connect, 3000);
       };
       socket.onerror = () => {
@@ -103,13 +128,21 @@ export function useChainMetrics(chainId: number, enabled: boolean): ChainMetrics
     };
 
     connect();
+    void applyRest();
+    restTimer = window.setInterval(() => {
+      if (!wsConnectedRef.current) {
+        void applyRest();
+      }
+    }, REST_POLL_MS);
+
     return () => {
       closed = true;
+      wsConnectedRef.current = false;
       if (retryTimer) {
         window.clearTimeout(retryTimer);
       }
-      if (pingTimer) {
-        window.clearTimeout(pingTimer);
+      if (restTimer) {
+        window.clearInterval(restTimer);
       }
       socket?.close();
     };

@@ -2,6 +2,8 @@
 
 概念与端到端流程（询价、prepare、allowance、SwapRouter、eth_call 模拟等）见 [swap-trade-flow.md](./swap-trade-flow.md)。
 
+演示前若列表混有 `0xseed…` 假数据：列表默认已过滤；也可执行 `db/scripts/clear-seed-swaps.sql` 物理删除。头块/已扫与底栏同源（WS METRICS，断开时 REST `/api/v1/chains/{chainId}/metrics`）。
+
 ## 前置
 
 1. Docker：Postgres + Redis 已起（`deploy/docker-compose.yml`）。

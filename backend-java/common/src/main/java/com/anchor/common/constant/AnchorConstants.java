@@ -56,6 +56,12 @@ public final class AnchorConstants {
     /** 追块时一次并发拉取的最大区块数（虚拟线程并行 getBlock）。 */
     public static final int CATCH_UP_CONCURRENCY = 4;
 
+    /** 扫块 Redis 选主锁 TTL（秒）；持有者需在过期前续约。 */
+    public static final long SCANNER_LOCK_TTL_SECONDS = 15L;
+
+    /** 扫块锁续约间隔（毫秒）。 */
+    public static final long SCANNER_LOCK_RENEW_MS = 5_000L;
+
     /** 代币 symbol / decimals 在 Redis 中的缓存时长（小时）。 */
     public static final int TOKEN_CACHE_HOURS = 24;
 

@@ -45,7 +45,7 @@ class BlockScannerResumeTest {
         scanner = new BlockScanner(settings, registry, mock(RpcGateway.class), mock(SwapParser.class),
                 mock(BlockIngestionService.class), mock(CheckpointMapper.class), mock(BlockHashMapper.class),
                 mock(StringRedisTemplate.class), mock(TokenMetadataService.class), mock(ReorgService.class),
-                mock(ChainEventPublishService.class), new SimpleMeterRegistry());
+                mock(ChainEventPublishService.class), new SimpleMeterRegistry(), mock(ScannerLease.class));
         scanner.registerPausedGauge();
     }
 

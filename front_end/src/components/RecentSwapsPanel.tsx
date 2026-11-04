@@ -19,7 +19,10 @@ import { TokenPair } from './TokenPair';
 interface RecentSwapsPanelProps {
   swaps: SwapTransaction[];
   onSelectTx: (tx: SwapTransaction) => void;
-  latestBlock: number;
+  /** 链头，与底栏 headBlock 同源（WS METRICS） */
+  headBlock: number;
+  /** 已扫检查点，与底栏 processedBlock 同源 */
+  processedBlock: number;
   isStreaming: boolean;
   onToggleStreaming: () => void;
   onTriggerReorgSimulation?: () => void;
@@ -29,7 +32,8 @@ interface RecentSwapsPanelProps {
 export const RecentSwapsPanel: React.FC<RecentSwapsPanelProps> = ({
   swaps,
   onSelectTx,
-  latestBlock,
+  headBlock,
+  processedBlock,
   isStreaming,
   onToggleStreaming,
   onTriggerReorgSimulation,
@@ -281,6 +285,11 @@ export const RecentSwapsPanel: React.FC<RecentSwapsPanelProps> = ({
                         </div>
                       ) : tx.status.type === 'confirming' ? (
                         <span className="text-blue-600 font-semibold text-[11px]">确认中</span>
+                      ) : tx.status.type === 'finalized' ? (
+                        <span className="text-emerald-700 font-semibold text-[11px] flex items-center gap-1">
+                          <Check className="w-3 h-3" />
+                          已最终确认
+                        </span>
                       ) : (
                         <span className="text-emerald-600 font-semibold text-[11px]">
                           已确认
@@ -327,8 +336,20 @@ export const RecentSwapsPanel: React.FC<RecentSwapsPanelProps> = ({
         </div>
 
         <div className="flex items-center gap-4 font-mono">
+          <span title="与底栏同源：WS METRICS 或 REST /chains/{id}/metrics">
+            头块：
+            <strong className="text-slate-600 font-bold">
+              {headBlock > 0 ? headBlock.toLocaleString() : '—'}
+            </strong>
+          </span>
           <span>
-            最新区块：<strong className="text-slate-600 font-bold">{latestBlock.toLocaleString()}</strong>
+            已扫：
+            <strong className="text-slate-600 font-bold">
+              {processedBlock > 0 ? processedBlock.toLocaleString() : '—'}
+            </strong>
+          </span>
+          <span className="hidden lg:inline text-slate-400" title="CONFIRMED=达到 confirmationBlocks；FINALIZED=区块已进入链 finalized（OP 栈常落后数百块）">
+            状态：确认中 → 已确认 → 已最终确认
           </span>
           <span>{isStreaming ? '每 3 秒刷新' : '已暂停'}</span>
         </div>

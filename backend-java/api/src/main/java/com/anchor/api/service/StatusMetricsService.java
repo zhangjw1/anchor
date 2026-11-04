@@ -1,5 +1,6 @@
 package com.anchor.api.service;
 
+import com.anchor.api.vo.ChainMetricsVO;
 import com.anchor.common.chain.RpcGateway;
 import com.anchor.common.constant.AnchorConstants;
 import com.anchor.common.constant.KafkaConstants;
@@ -58,25 +59,39 @@ public class StatusMetricsService {
      * 向已有 METRICS 节点写入状态栏字段。
      */
     public void fill(ObjectNode node, long chainId) {
+        ChainMetricsVO view = snapshot(chainId);
+        node.put("headBlock", view.headBlock());
+        node.put("processedBlock", view.processedBlock());
+        node.put("lagBlocks", view.lagBlocks());
+        node.put("blockNumber", view.processedBlock());
+        node.put("rpcQps", view.rpcQps());
+        node.put("rpcErrorRate", view.rpcErrorRate());
+        if (view.kafkaLag() != null) {
+            node.put("kafkaLag", view.kafkaLag());
+        } else {
+            node.putNull("kafkaLag");
+        }
+        node.put("reorgCount", view.reorgCount());
+        node.put("reorgDepth", view.reorgDepth());
+    }
+
+    /** REST / 测试用快照。 */
+    public ChainMetricsVO snapshot(long chainId) {
         long processed = processedBlock(chainId);
         long head = headBlock(chainId, processed);
         long lag = Math.max(0L, head - processed);
         RateSnapshot rpc = rpcRate(chainId);
         long kafkaLag = kafkaLag();
-
-        node.put("headBlock", head);
-        node.put("processedBlock", processed);
-        node.put("lagBlocks", lag);
-        node.put("blockNumber", processed);
-        node.put("rpcQps", rpc.qps());
-        node.put("rpcErrorRate", rpc.errorRate());
-        if (kafkaLag >= 0) {
-            node.put("kafkaLag", kafkaLag);
-        } else {
-            node.putNull("kafkaLag");
-        }
-        node.put("reorgCount", redisLong(RedisKeys.reorgCount(chainId)));
-        node.put("reorgDepth", redisLong(RedisKeys.reorgDepth(chainId)));
+        return new ChainMetricsVO(
+                chainId,
+                head,
+                processed,
+                lag,
+                rpc.qps(),
+                rpc.errorRate(),
+                kafkaLag >= 0 ? kafkaLag : null,
+                redisLong(RedisKeys.reorgCount(chainId)),
+                redisLong(RedisKeys.reorgDepth(chainId)));
     }
 
     private long processedBlock(long chainId) {

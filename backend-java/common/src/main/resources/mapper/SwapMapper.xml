@@ -69,6 +69,10 @@
         <if test="query.includeReorged == null or query.includeReorged == false">
             AND sw.confirm_status &lt;&gt; 'REORGED'
         </if>
+        <if test="query.includeSeed == null or query.includeSeed == false">
+            AND sw.tx_hash NOT LIKE '0xseed%'
+            AND sw.block_hash NOT LIKE '0xseed%'
+        </if>
         <if test="query.address != null and query.address != ''">
             AND sw.watched_address = #{query.address}
         </if>

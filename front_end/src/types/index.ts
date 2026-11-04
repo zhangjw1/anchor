@@ -11,9 +11,10 @@ export interface WatchAddress {
 
 export type SwapDirection = 'BUY' | 'SELL' | 'SWAP';
 
-export type SwapStatus = 
+export type SwapStatus =
   | { type: 'reorg'; label: string }
   | { type: 'confirming'; current: number; total: number }
+  | { type: 'confirmed'; label: string }
   | { type: 'finalized'; label: string };
 
 export interface SwapHopDetail {
@@ -71,5 +72,7 @@ export interface NetworkConfig {
   shortName: string;
   chainId: number;
   blockTimeSec: number;
+  /** 业务「已确认」所需块数，与 chains.yaml confirmationBlocks 对齐 */
+  confirmationBlocks: number;
   explorerUrl: string;
 }

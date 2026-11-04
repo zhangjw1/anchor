@@ -9,6 +9,8 @@ public class SwapQuery {
     private String direction;
     /** 为 true 时包含 REORGED；默认 false / null 均排除。 */
     private Boolean includeReorged;
+    /** 为 true 时包含 tx_hash 以 0xseed 开头的演示数据；默认排除。 */
+    private Boolean includeSeed;
 
     public Long getChainId() { return chainId; }
     public void setChainId(Long chainId) { this.chainId = chainId; }
@@ -20,4 +22,6 @@ public class SwapQuery {
     public void setDirection(String direction) { this.direction = direction; }
     public Boolean getIncludeReorged() { return includeReorged; }
     public void setIncludeReorged(Boolean includeReorged) { this.includeReorged = includeReorged; }
+    public Boolean getIncludeSeed() { return includeSeed; }
+    public void setIncludeSeed(Boolean includeSeed) { this.includeSeed = includeSeed; }
 }

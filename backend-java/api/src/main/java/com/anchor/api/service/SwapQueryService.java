@@ -18,4 +18,10 @@ public interface SwapQueryService {
      */
     IPage<SwapDTO> list(long chainId, String address, String dex, String direction, Integer page, Integer size,
                         boolean includeReorged);
+
+    /**
+     * @param includeSeed 为 true 时包含 0xseed 演示数据；默认 false
+     */
+    IPage<SwapDTO> list(long chainId, String address, String dex, String direction, Integer page, Integer size,
+                        boolean includeReorged, boolean includeSeed);
 }

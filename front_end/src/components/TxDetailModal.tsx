@@ -87,10 +87,15 @@ export const TxDetailModal: React.FC<TxDetailModalProps> = ({
                 </div>
               </div>
             </div>
-          ) : (
+          ) : tx.status.type === 'finalized' ? (
             <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-emerald-900 flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
               <span className="font-bold">交易已最终确认 (Finalized Block)</span>
+            </div>
+          ) : (
+            <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-emerald-900 flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span className="font-bold">交易已确认（尚未达到链 finalized）</span>
             </div>
           )}
 

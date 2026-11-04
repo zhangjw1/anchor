@@ -27,7 +27,8 @@ public class SwapController {
     public SwapPageVO swaps(@RequestParam @NotNull Long chainId, @RequestParam(required = false) String address,
                             @RequestParam(required = false) String dex, @RequestParam(required = false) String direction,
                             @RequestParam(required = false) Integer page, @RequestParam(required = false) Integer size,
-                            @RequestParam(required = false, defaultValue = "false") boolean includeReorged) {
-        return SwapPageVO.from(swapQueryService.list(chainId, address, dex, direction, page, size, includeReorged));
+                            @RequestParam(required = false, defaultValue = "false") boolean includeReorged,
+                            @RequestParam(required = false, defaultValue = "false") boolean includeSeed) {
+        return SwapPageVO.from(swapQueryService.list(chainId, address, dex, direction, page, size, includeReorged, includeSeed));
     }
 }

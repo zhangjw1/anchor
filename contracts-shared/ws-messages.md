@@ -129,6 +129,23 @@ API 提供 `/ws`。字段名 camelCase，金额是最小单位十进制字符串
 
 `swaps` 只收到 `watchedAddress` 匹配的成交和确认。`tx` 只收到 `txHash` 匹配的成交和确认。
 
+用户兑换交易状态（模式 A 上报后由 API 轮询回执推送，**不占用** swaps 补发序号）：
+
+```json
+{
+  "channel": "tx",
+  "type": "TX_UPDATE",
+  "chainId": 84532,
+  "txHash": "0x123",
+  "kind": "SWAP",
+  "status": "PENDING",
+  "quoteId": "abc",
+  "revertReason": null
+}
+```
+
+`status`：`PENDING` / `CONFIRMED` / `FAILED` / `REPLACED`。`kind`：`APPROVE` / `SWAP`。失败时可带 `revertReason`。
+
 指标每 3 秒一次。`blockNumber` 是 checkpoint，`reorgCount` 是累计次数，`reorgDepth` 是最近一次深度：
 
 ```json

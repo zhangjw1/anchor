@@ -16,3 +16,6 @@ export function defaultChainId(): number {
   const parsed = raw ? Number(raw) : 8453;
   return Number.isFinite(parsed) ? parsed : 8453;
 }
+
+/** P5a 允许真实兑换的链（Base Sepolia）。 */
+export const TRADE_ALLOWED_CHAIN_ID = 84532;

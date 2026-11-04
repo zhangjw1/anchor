@@ -14,6 +14,7 @@ import com.anchor.common.constant.RedisKeys;
 import com.anchor.common.dao.BlockHashMapper;
 import com.anchor.common.dao.CheckpointMapper;
 import com.anchor.common.dto.SwapEventDTO;
+import com.anchor.common.metrics.AnchorMetricNames;
 import com.anchor.indexer.service.BlockIngestionService;
 import com.anchor.indexer.service.ChainEventPublishService;
 import com.anchor.indexer.dto.BlockIngestDTO;
@@ -21,6 +22,7 @@ import com.anchor.indexer.dto.ReorgHandleDTO;
 import com.anchor.indexer.dto.ScanStepDTO;
 import com.anchor.indexer.service.ReorgService;
 import com.anchor.parser.service.TokenMetadataService;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
@@ -56,12 +58,13 @@ public class BlockScanner implements ChainScanner {
     private final TokenMetadataService tokenMetadataService;
     private final ReorgService reorgService;
     private final ChainEventPublishService publisher;
+    private final MeterRegistry meterRegistry;
     private final AtomicBoolean paused = new AtomicBoolean(false);
 
     public BlockScanner(AnchorSettings settings, ChainRegistry chainRegistry, RpcGateway rpcGateway, SwapParser swapParser,
                         BlockIngestionService ingestionService, CheckpointMapper checkpointMapper, BlockHashMapper blockHashMapper,
                         StringRedisTemplate redis, TokenMetadataService tokenMetadataService, ReorgService reorgService,
-                        ChainEventPublishService publisher) {
+                        ChainEventPublishService publisher, MeterRegistry meterRegistry) {
         this.settings = settings;
         this.chainRegistry = chainRegistry;
         this.rpcGateway = rpcGateway;
@@ -73,6 +76,7 @@ public class BlockScanner implements ChainScanner {
         this.tokenMetadataService = tokenMetadataService;
         this.reorgService = reorgService;
         this.publisher = publisher;
+        this.meterRegistry = meterRegistry;
     }
     /**
      * 没有检查点时从当前链头开始，不回补历史块。
@@ -143,6 +147,11 @@ public class BlockScanner implements ChainScanner {
             publisher.publishSwaps(ingested.swaps().stream().map(SwapEventDTO::from).toList());
             publisher.publishChain(ingested.confirmations());
             ingestionService.advanceCheckpoint(chain.chainId(), block.number(), block.hash());
+            String chainTag = String.valueOf(chain.chainId());
+            meterRegistry.counter(AnchorMetricNames.INDEXER_BLOCKS, "chainId", chainTag).increment();
+            if (!swaps.isEmpty()) {
+                meterRegistry.counter(AnchorMetricNames.INDEXER_SWAPS, "chainId", chainTag).increment(swaps.size());
+            }
             log.info("区块已入库，chainId={}，区块={}，交换数={}", chain.chainId(), block.number(), swaps.size());
             return ScanStepDTO.ingested(block.number() + 1);
         } finally {
@@ -179,8 +188,12 @@ public class BlockScanner implements ChainScanner {
                 continue;
             }
             MDC.put("txHash", tx.hash());
-            //解析交易里的swap事件
-            swapParser.parse(new SwapParser.SwapParseContext(chain, block, tx, receipt)).ifPresent(swaps::add);
+            try {
+                swapParser.parse(new SwapParser.SwapParseContext(chain, block, tx, receipt)).ifPresent(swaps::add);
+            } catch (RuntimeException ex) {
+                meterRegistry.counter(AnchorMetricNames.INDEXER_PARSE_FAILURES, "chainId", String.valueOf(chain.chainId())).increment();
+                log.warn("解析 Swap 失败，txHash={}", tx.hash(), ex);
+            }
         }
         return swaps;
     }

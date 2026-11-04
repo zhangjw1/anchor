@@ -1,21 +1,23 @@
 package com.anchor.api.controller;
 
+import com.anchor.api.service.StatusMetricsService;
 import com.anchor.api.service.WebSocketPushService;
 import com.anchor.common.chain.ChainRegistry;
 import com.anchor.common.constant.AnchorConstants;
 import com.anchor.common.constant.KafkaConstants;
-import com.anchor.common.constant.RedisKeys;
-import com.anchor.common.dao.CheckpointMapper;
 import com.anchor.common.domain.AnchorException;
 import com.anchor.common.dto.ChainEventDTO;
 import com.anchor.common.dto.SwapEventDTO;
+import com.anchor.common.metrics.AnchorMetricNames;
 import com.anchor.common.support.Addresses;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.MeterRegistry;
+import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
@@ -47,24 +49,32 @@ public class WebSocketPushHandler extends TextWebSocketHandler implements WebSoc
     static final String TYPE_RESYNC = "RESYNC";
     static final String TYPE_ERROR = "ERROR";
     static final String TYPE_METRICS = "METRICS";
+    static final String TYPE_TX_UPDATE = "TX_UPDATE";
     private static final String SUBSCRIPTIONS = "subscriptions";
     private static final Pattern TX_HASH = Pattern.compile("^0x[0-9a-fA-F]{64}$");
     private static final Logger log = LoggerFactory.getLogger(WebSocketPushHandler.class);
 
     private final ObjectMapper objectMapper;
     private final ChainRegistry chainRegistry;
-    private final CheckpointMapper checkpointMapper;
-    private final StringRedisTemplate redis;
+    private final StatusMetricsService statusMetricsService;
+    private final MeterRegistry meterRegistry;
     private final ReplayBuffer replay = new ReplayBuffer();
     private final List<WebSocketSession> sessions = new CopyOnWriteArrayList<>();
     private final Map<Long, Object> chainLocks = new ConcurrentHashMap<>();
 
-    public WebSocketPushHandler(ObjectMapper objectMapper, ChainRegistry chainRegistry, CheckpointMapper checkpointMapper,
-                     StringRedisTemplate redis) {
+    public WebSocketPushHandler(ObjectMapper objectMapper, ChainRegistry chainRegistry,
+                                StatusMetricsService statusMetricsService, MeterRegistry meterRegistry) {
         this.objectMapper = objectMapper;
         this.chainRegistry = chainRegistry;
-        this.checkpointMapper = checkpointMapper;
-        this.redis = redis;
+        this.statusMetricsService = statusMetricsService;
+        this.meterRegistry = meterRegistry;
+    }
+
+    @PostConstruct
+    void registerConnectionGauge() {
+        Gauge.builder(AnchorMetricNames.WS_CONNECTIONS, sessions, List::size)
+                .description("Active WebSocket connections")
+                .register(meterRegistry);
     }
     /**
      * 把一笔新交换推给订阅了对应地址的连接。
@@ -88,6 +98,38 @@ public class WebSocketPushHandler extends TextWebSocketHandler implements WebSoc
         node.set("hops", objectMapper.valueToTree(event.hops() == null ? List.of() : event.hops()));
         publish(event.chainId(), node);
     }
+    /**
+     * 推送用户交易状态到订阅了对应 txHash 的连接（不占 swaps 序号）。
+     */
+    @Override
+    public void onTxUpdate(long chainId, String txHash, String kind, String status, String quoteId, String revertReason) {
+        ObjectNode node = objectMapper.createObjectNode();
+        node.put("channel", CHANNEL_TX);
+        node.put("type", TYPE_TX_UPDATE);
+        node.put("chainId", chainId);
+        node.put("txHash", txHash);
+        node.put("kind", kind);
+        node.put("status", status);
+        if (quoteId != null) {
+            node.put("quoteId", quoteId);
+        }
+        if (revertReason != null) {
+            node.put("revertReason", revertReason);
+        } else {
+            node.putNull("revertReason");
+        }
+        String hash = txHash == null ? "" : txHash.toLowerCase();
+        for (WebSocketSession session : sessions) {
+            for (Subscription subscription : subscriptions(session)) {
+                if (CHANNEL_TX.equals(subscription.channel)
+                        && subscription.chainId == chainId
+                        && hash.equalsIgnoreCase(subscription.txHash)) {
+                    send(session, node);
+                }
+            }
+        }
+    }
+
     /**
      * 推送确认进度或重组事件。
      */
@@ -162,7 +204,7 @@ public class WebSocketPushHandler extends TextWebSocketHandler implements WebSoc
         }
     }
     /**
-     * 向订阅了指标的连接推送当前链头。
+     * 向订阅了指标的连接推送状态栏字段。
      */
     @Scheduled(fixedRate = AnchorConstants.WS_METRICS_INTERVAL_MS)
     public void metrics() {
@@ -174,12 +216,7 @@ public class WebSocketPushHandler extends TextWebSocketHandler implements WebSoc
             node.put("channel", CHANNEL_METRICS);
             node.put("type", TYPE_METRICS);
             node.put("chainId", chain.chainId());
-            Long head = checkpointMapper.getBlockNumber(chain.chainId());
-            if (head != null) {
-                node.put("blockNumber", head);
-            }
-            node.put("reorgCount", redisLong(RedisKeys.reorgCount(chain.chainId())));
-            node.put("reorgDepth", redisLong(RedisKeys.reorgDepth(chain.chainId())));
+            statusMetricsService.fill(node, chain.chainId());
             for (WebSocketSession session : sessions) {
                 if (subscriptions(session).stream().anyMatch(item -> item.channel.equals(CHANNEL_METRICS) && item.chainId == chain.chainId())) {
                     send(session, node);
@@ -302,18 +339,6 @@ public class WebSocketPushHandler extends TextWebSocketHandler implements WebSoc
         node.put("chainId", subscription.chainId);
         node.put("message", "序号已过期，请重新拉取 REST");
         return node;
-    }
-
-    private long redisLong(String key) {
-        String raw = redis.opsForValue().get(key);
-        if (raw == null || raw.isBlank()) {
-            return 0L;
-        }
-        try {
-            return Long.parseLong(raw);
-        } catch (NumberFormatException ex) {
-            return 0L;
-        }
     }
 
     private Object lock(long chainId) {

@@ -1,6 +1,7 @@
 package com.anchor.api.service;
 
 import com.anchor.common.chain.Quoter;
+import com.anchor.common.chain.StoredQuote;
 
 import java.math.BigInteger;
 
@@ -8,6 +9,9 @@ import java.math.BigInteger;
 public interface QuoteQueryService {
 
     QuoteView quote(long chainId, String tokenIn, String tokenOut, BigInteger amountIn, int slippageBps, String clientIp);
+
+    /** 按报价单号读取；不存在或损坏时返回 null。 */
+    StoredQuote findStored(String quoteId);
 
     record QuoteView(
             Quoter.Quote quote,
@@ -17,6 +21,9 @@ public interface QuoteQueryService {
             String tokenOut,
             String tokenOutSymbol,
             Integer tokenOutDecimals,
-            BigInteger amountIn) {
+            BigInteger amountIn,
+            int slippageBps,
+            boolean nativeIn,
+            boolean nativeOut) {
     }
 }

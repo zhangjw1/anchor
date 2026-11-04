@@ -188,6 +188,71 @@ paths:
           $ref: "#/components/responses/Error"
         "429":
           $ref: "#/components/responses/Error"
+  /api/v1/trades/prepare:
+    post:
+      operationId: prepareTrade
+      summary: 根据报价构建 approve / swap 待签交易
+      description: |
+        模式 A（用户钱包签名）。仅 base-sepolia 允许。
+        校验报价未过期；检查 allowance；不足时返回 approve 交易（默认精确数量）。
+        构建 SwapRouter02 exactInputSingle（经 multicall 带 deadline），eth_call 模拟 + estimateGas，失败返回 revert 原因。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TradePrepareRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TradePrepareResponse"
+        "400":
+          $ref: "#/components/responses/Error"
+        "404":
+          $ref: "#/components/responses/Error"
+  /api/v1/trades/report:
+    post:
+      operationId: reportTrade
+      summary: 前端上报已广播的 txHash
+      description: 登记追踪并开始轮询回执；仅 base-sepolia。通过 WebSocket tx 频道推送 TX_UPDATE。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TradeReportRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TradeStatus"
+        "400":
+          $ref: "#/components/responses/Error"
+  /api/v1/trades/{txHash}:
+    get:
+      operationId: getTrade
+      summary: 查询用户交易状态
+      parameters:
+        - $ref: "#/components/parameters/chainId"
+        - name: txHash
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TradeStatus"
+        "404":
+          $ref: "#/components/responses/Error"
 components:
   parameters:
     chainId:
@@ -478,3 +543,98 @@ components:
           type: integer
           format: int64
           description: 报价过期时间，毫秒
+    TradePrepareRequest:
+      type: object
+      required: [quoteId, userAddress]
+      properties:
+        quoteId:
+          type: string
+        userAddress:
+          type: string
+        infiniteApprove:
+          type: boolean
+          default: false
+          description: true 时 approve 为 max uint256；默认按 amountIn 精确授权
+    UnsignedTx:
+      type: object
+      required: [chainId, to, data, value]
+      properties:
+        chainId:
+          type: integer
+          format: int64
+        to:
+          type: string
+        data:
+          type: string
+        value:
+          type: string
+          description: wei，十进制字符串
+        gas:
+          type: string
+          nullable: true
+          description: estimateGas 结果；模拟失败时可能为空
+    TradePrepareResponse:
+      type: object
+      required: [quoteId, expiresAtMs, needsApprove, swapTx, amountOutMinimum, deadline]
+      properties:
+        quoteId:
+          type: string
+        expiresAtMs:
+          type: integer
+          format: int64
+        needsApprove:
+          type: boolean
+        approveTx:
+          $ref: "#/components/schemas/UnsignedTx"
+        swapTx:
+          $ref: "#/components/schemas/UnsignedTx"
+        amountOutMinimum:
+          type: string
+        deadline:
+          type: integer
+          format: int64
+          description: Unix 秒
+    TradeReportRequest:
+      type: object
+      required: [chainId, txHash, kind, userAddress]
+      properties:
+        chainId:
+          type: integer
+          format: int64
+        txHash:
+          type: string
+        kind:
+          type: string
+          enum: [APPROVE, SWAP]
+        quoteId:
+          type: string
+          nullable: true
+        userAddress:
+          type: string
+    TradeStatus:
+      type: object
+      required: [chainId, txHash, kind, status]
+      properties:
+        chainId:
+          type: integer
+          format: int64
+        txHash:
+          type: string
+        kind:
+          type: string
+          enum: [APPROVE, SWAP]
+        status:
+          type: string
+          enum: [PENDING, CONFIRMED, FAILED, REPLACED]
+        quoteId:
+          type: string
+          nullable: true
+        userAddress:
+          type: string
+          nullable: true
+        revertReason:
+          type: string
+          nullable: true
+        updatedAtMs:
+          type: integer
+          format: int64

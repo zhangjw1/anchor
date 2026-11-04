@@ -1,0 +1,225 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "各链 RPC 每秒请求数",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "id": 1,
+      "title": "RPC 请求速率 (QPS)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum by (chainId) (rate(rpc_requests_total[1m]))",
+          "legendFormat": "链 {{chainId}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "RPC 错误次数 / 总请求次数",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "id": 2,
+      "title": "RPC 错误率",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum by (chainId) (rate(rpc_errors_total[1m])) / clamp_min(sum by (chainId) (rate(rpc_requests_total[1m])), 0.001)",
+          "legendFormat": "链 {{chainId}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "RPC 调用延迟 P99",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "id": 3,
+      "title": "RPC 延迟 P99",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum by (le, chainId) (rate(rpc_latency_seconds_bucket[5m])))",
+          "legendFormat": "P99 链 {{chainId}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "索引器扫块、解析出的 Swap、解析失败",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "id": 4,
+      "title": "索引器：区块 / Swap / 解析失败",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum by (chainId) (rate(anchor_indexer_blocks_total[1m]))",
+          "legendFormat": "区块 {{chainId}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum by (chainId) (rate(anchor_indexer_swaps_total[1m]))",
+          "legendFormat": "Swap {{chainId}}",
+          "refId": "B"
+        },
+        {
+          "expr": "sum by (chainId) (rate(anchor_indexer_parse_failures_total[1m]))",
+          "legendFormat": "解析失败 {{chainId}}",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "报价接口平均耗时（按结果：ok / cache / error）",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
+      "id": 5,
+      "title": "报价延迟",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum by (chainId, result) (rate(anchor_quote_latency_seconds_sum[1m])) / clamp_min(sum by (chainId, result) (rate(anchor_quote_latency_seconds_count[1m])), 0.001)",
+          "legendFormat": "{{result}} 链 {{chainId}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "用户交易上报、链上确认、失败速率",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "unit": "ops"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
+      "id": 6,
+      "title": "交易：上报 / 确认 / 失败",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum by (chainId) (rate(anchor_trade_reports_total[5m]))",
+          "legendFormat": "上报 {{chainId}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum by (chainId) (rate(anchor_trade_confirmed_total[5m]))",
+          "legendFormat": "确认 {{chainId}}",
+          "refId": "B"
+        },
+        {
+          "expr": "sum by (chainId) (rate(anchor_trade_failed_total[5m]))",
+          "legendFormat": "失败 {{chainId}}",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "从上报到确认的平均耗时",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "id": 7,
+      "title": "交易确认耗时",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "sum by (chainId) (rate(anchor_trade_confirm_latency_seconds_sum[5m])) / clamp_min(sum by (chainId) (rate(anchor_trade_confirm_latency_seconds_count[5m])), 0.001)",
+          "legendFormat": "平均 链 {{chainId}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "description": "当前活跃的 WebSocket 连接数",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 50 },
+              { "color": "red", "value": 200 }
+            ]
+          },
+          "unit": "none"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "id": 8,
+      "title": "WebSocket 连接数",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "anchor_ws_connections",
+          "legendFormat": "连接数",
+          "refId": "A"
+        }
+      ]
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 39,
+  "tags": ["anchor", "中文"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "timezone": "browser",
+  "title": "Anchor 总览",
+  "uid": "anchor-overview",
+  "version": 2
+}

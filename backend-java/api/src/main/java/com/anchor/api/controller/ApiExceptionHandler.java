@@ -28,7 +28,7 @@ public class ApiExceptionHandler {
             case "NOT_FOUND", "UNKNOWN_CHAIN" -> HttpStatus.NOT_FOUND;
             case "CONFLICT" -> HttpStatus.CONFLICT;
             case "RATE_LIMITED" -> HttpStatus.TOO_MANY_REQUESTS;
-            case "NO_LIQUIDITY", "UNSUPPORTED" -> HttpStatus.BAD_REQUEST;
+            case "NO_LIQUIDITY", "UNSUPPORTED", "SIMULATION_FAILED", "QUOTE_EXPIRED" -> HttpStatus.BAD_REQUEST;
             default -> HttpStatus.BAD_REQUEST;
         };
         return ResponseEntity.status(status).body(new ErrorVO(ex.getCode(), ex.getMessage()));

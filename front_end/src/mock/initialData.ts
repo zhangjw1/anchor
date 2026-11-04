@@ -104,3 +104,11 @@ export const NETWORKS: NetworkConfig[] = [
     explorerUrl: 'https://arbiscan.io',
   },
 ];
+
+/** live 模式只展示钱包已配置的链，避免出现「未配置的链」。 */
+export function selectableNetworks(liveWallet: boolean): NetworkConfig[] {
+  if (!liveWallet) {
+    return NETWORKS;
+  }
+  return NETWORKS.filter((net) => net.chainId === 8453 || net.chainId === 84532);
+}

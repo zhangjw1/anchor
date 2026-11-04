@@ -4,11 +4,15 @@ import com.anchor.common.chain.AnchorSettings;
 import com.anchor.common.chain.ChainRegistry;
 import com.anchor.common.chain.Quoter;
 import com.anchor.common.chain.RpcGateway;
+import com.anchor.common.chain.Signer;
+import com.anchor.common.chain.TxBuilder;
 import com.anchor.common.chain.YamlChainRegistry;
 import com.anchor.common.handler.BigIntegerNumericTypeHandler;
+import com.anchor.common.manager.ClientSigner;
 import com.anchor.common.manager.FailoverRpcGateway;
 import com.anchor.common.manager.MulticallClient;
 import com.anchor.common.manager.PoolPriceOracle;
+import com.anchor.common.manager.SwapRouterTxBuilder;
 import com.anchor.common.manager.UniswapV3Quoter;
 import com.baomidou.mybatisplus.annotation.DbType;
 import com.baomidou.mybatisplus.autoconfigure.ConfigurationCustomizer;
@@ -64,6 +68,18 @@ public class AnchorCommonAutoConfiguration {
     @Bean
     public Quoter quoter(ChainRegistry chainRegistry, RpcGateway rpcGateway, PoolPriceOracle poolPriceOracle) {
         return new UniswapV3Quoter(chainRegistry, rpcGateway, poolPriceOracle);
+    }
+
+    /** SwapRouter02 / approve 交易构建。 */
+    @Bean
+    public TxBuilder txBuilder(ChainRegistry chainRegistry) {
+        return new SwapRouterTxBuilder(chainRegistry);
+    }
+
+    /** 模式 A：客户端签名校验。 */
+    @Bean
+    public Signer signer(ChainRegistry chainRegistry) {
+        return new ClientSigner(chainRegistry);
     }
     /**
      * PostgreSQL 分页插件。

@@ -148,3 +148,58 @@ export function getAssets(chainId: number, address: string, tokens?: string[]) {
 export function createQuote(body: QuoteRequestDto) {
   return request<QuoteDto>('/api/v1/quotes', { method: 'POST', body: JSON.stringify(body) });
 }
+
+export interface UnsignedTxDto {
+  chainId: number;
+  to: string;
+  data: string;
+  value: string;
+  gas?: string | null;
+}
+
+export interface TradePrepareRequestDto {
+  quoteId: string;
+  userAddress: string;
+  infiniteApprove?: boolean;
+}
+
+export interface TradePrepareResponseDto {
+  quoteId: string;
+  expiresAtMs: number;
+  needsApprove: boolean;
+  approveTx?: UnsignedTxDto | null;
+  swapTx: UnsignedTxDto;
+  amountOutMinimum: string;
+  deadline: number;
+}
+
+export interface TradeReportRequestDto {
+  chainId: number;
+  txHash: string;
+  kind: 'APPROVE' | 'SWAP';
+  quoteId?: string | null;
+  userAddress: string;
+}
+
+export interface TradeStatusDto {
+  chainId: number;
+  txHash: string;
+  kind: 'APPROVE' | 'SWAP';
+  status: 'PENDING' | 'CONFIRMED' | 'FAILED' | 'REPLACED';
+  quoteId?: string | null;
+  userAddress?: string | null;
+  revertReason?: string | null;
+  updatedAtMs: number;
+}
+
+export function prepareTrade(body: TradePrepareRequestDto) {
+  return request<TradePrepareResponseDto>('/api/v1/trades/prepare', { method: 'POST', body: JSON.stringify(body) });
+}
+
+export function reportTrade(body: TradeReportRequestDto) {
+  return request<TradeStatusDto>('/api/v1/trades/report', { method: 'POST', body: JSON.stringify(body) });
+}
+
+export function getTrade(chainId: number, txHash: string) {
+  return request<TradeStatusDto>(`/api/v1/trades/${txHash}?chainId=${chainId}`);
+}

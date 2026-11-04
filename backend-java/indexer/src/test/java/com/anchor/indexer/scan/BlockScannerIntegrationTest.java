@@ -335,6 +335,16 @@ class BlockScannerIntegrationTest {
         public String ethCall(long chainId, String to, String data) {
             throw new UnsupportedOperationException();
         }
+
+        @Override
+        public String ethCall(long chainId, String from, String to, String data, java.math.BigInteger value) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
+        public java.math.BigInteger estimateGas(long chainId, String from, String to, String data, java.math.BigInteger value) {
+            throw new UnsupportedOperationException();
+        }
     }
 
     static final class RecordingPublisher implements ChainEventPublishService {

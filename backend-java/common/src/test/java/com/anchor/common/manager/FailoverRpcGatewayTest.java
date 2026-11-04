@@ -48,5 +48,7 @@ class FailoverRpcGatewayTest {
         public ChainBlock getBlock(long blockNumber) { throw new UnsupportedOperationException(); }
         public List<ChainReceipt> getReceipts(List<String> txHashes) { throw new UnsupportedOperationException(); }
         public String ethCall(String to, String data) { throw new UnsupportedOperationException(); }
+        public String ethCall(String from, String to, String data, java.math.BigInteger value) { throw new UnsupportedOperationException(); }
+        public java.math.BigInteger estimateGas(String from, String to, String data, java.math.BigInteger value) { throw new UnsupportedOperationException(); }
     }
 }

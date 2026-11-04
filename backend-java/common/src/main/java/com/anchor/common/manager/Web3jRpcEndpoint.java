@@ -118,9 +118,28 @@ public final class Web3jRpcEndpoint implements RpcEndpoint {
 
     @Override
     public String ethCall(String to, String data) throws Exception {
-        EthCall response = web3j.ethCall(Transaction.createEthCallTransaction(null, to, data), DefaultBlockParameterName.LATEST).send();
+        return ethCall(null, to, data, BigInteger.ZERO);
+    }
+
+    @Override
+    public String ethCall(String from, String to, String data, BigInteger value) throws Exception {
+        BigInteger wei = value == null ? BigInteger.ZERO : value;
+        Transaction tx = Transaction.createFunctionCallTransaction(from, null, null, null, to, wei, data);
+        EthCall response = web3j.ethCall(tx, DefaultBlockParameterName.LATEST).send();
+        if (response.isReverted()) {
+            throw new IllegalStateException(response.getRevertReason() != null ? response.getRevertReason() : "execution reverted");
+        }
         throwIfError(response);
         return response.getValue();
+    }
+
+    @Override
+    public BigInteger estimateGas(String from, String to, String data, BigInteger value) throws Exception {
+        BigInteger wei = value == null ? BigInteger.ZERO : value;
+        Transaction tx = Transaction.createFunctionCallTransaction(from, null, null, null, to, wei, data);
+        var response = web3j.ethEstimateGas(tx).send();
+        throwIfError(response);
+        return response.getAmountUsed();
     }
 
     private static ChainReceipt toReceipt(TransactionReceipt receipt) {

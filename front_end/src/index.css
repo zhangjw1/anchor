@@ -31,3 +31,21 @@
 ::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
+
+/* RainbowKit 弹层贴近 Anchor 面板风格（白底、细边框、深色选中态） */
+[data-rk] [role="dialog"] {
+  font-family: 'DM Sans', 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+  border-radius: 12px !important;
+  border: 1px solid #e2e8f0 !important;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.12) !important;
+}
+
+[data-rk] [role="dialog"] button[data-testid="rk-chain-option"] {
+  border-radius: 8px !important;
+}
+
+[data-rk] [role="dialog"] button[aria-pressed="true"],
+[data-rk] [role="dialog"] button[data-testid="rk-chain-option"][data-selected="true"] {
+  background: #f8fafc !important;
+  box-shadow: inset 0 0 0 1px #e2e8f0 !important;
+}

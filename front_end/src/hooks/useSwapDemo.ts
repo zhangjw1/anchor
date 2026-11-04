@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { ApiError, createQuote } from '../api/anchor';
-import { isMockMode } from '../config/env';
+import { useAccount, useSendTransaction, useSwitchChain } from 'wagmi';
+import { ApiError, createQuote, getTrade, prepareTrade, reportTrade, UnsignedTxDto } from '../api/anchor';
+import { isMockMode, TRADE_ALLOWED_CHAIN_ID } from '../config/env';
 import { Token } from '../types';
 import { feeTierToPercent, fromRawAmount, slippagePercentToBps, toRawAmount } from '../utils/amount';
 import {
@@ -36,6 +37,7 @@ export const DEMO_STATES: { value: DemoState; label: string }[] = [
 
 const FEE_DISPLAY = [0.01, 0.05, 0.3, 1] as const;
 const QUOTE_DEBOUNCE_MS = 400;
+const NATIVE = '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee';
 
 export function useSwapDemo(
   tokens: Record<string, Token>,
@@ -44,6 +46,9 @@ export function useSwapDemo(
 ) {
   const live = options?.live ?? !isMockMode();
   const chainId = options?.chainId ?? 8453;
+  const account = useAccount();
+  const { sendTransactionAsync } = useSendTransaction();
+  const { switchChainAsync } = useSwitchChain();
 
   const [fromSymbol, setFromSymbol] = useState('WETH');
   const [toSymbol, setToSymbol] = useState('USDC');
@@ -62,6 +67,7 @@ export function useSwapDemo(
   const committed = useRef(false);
   const nextNonce = useRef(MOCK_INITIAL_NONCE);
   const quoteSeq = useRef(0);
+  const liveBusy = useRef(false);
   useEffect(() => { executeRef.current = onExecuteSwap; }, [onExecuteSwap]);
 
   const fromToken = tokens[fromSymbol];
@@ -78,14 +84,13 @@ export function useSwapDemo(
   const minimumReceived = live
     ? (bestRoute?.amountOutMinimum ?? 0)
     : getMinimumReceived(received, validSlippage ? effectiveSlippage : DEFAULT_SLIPPAGE, toToken?.decimals ?? 18);
-  const isBusy = transaction !== null && step < 4;
+  const isBusy = (transaction !== null && step < 4) || liveBusy.current;
   const insufficient = validAmount && numFrom > (fromToken?.balance ?? 0);
-  const needsApproval = fromSymbol !== 'ETH' && !authorized.includes(fromSymbol);
-  const state: DemoState = isBusy
-    ? 'progress'
+  const needsApproval = live ? false : (fromSymbol !== 'ETH' && !authorized.includes(fromSymbol));
+  const state: DemoState = (transaction !== null && step < 4) || isApproving
+    ? (isApproving && live ? 'approval' : 'progress')
     : forcedState ?? (!validAmount ? 'empty' : isQuoting ? 'quoting' : insufficient ? 'insufficient' : needsApproval ? 'approval' : received > 0 || !live ? 'ready' : quoteError ? 'failed' : 'empty');
 
-  // mock 报价延迟
   useEffect(() => {
     if (live) {
       return;
@@ -99,7 +104,6 @@ export function useSwapDemo(
     return () => clearTimeout(timer);
   }, [fromAmount, fromSymbol, toSymbol, validAmount, live]);
 
-  // 真实报价
   useEffect(() => {
     if (!live) {
       return;
@@ -117,8 +121,8 @@ export function useSwapDemo(
       const amountIn = toRawAmount(fromAmount, fromToken.decimals);
       createQuote({
         chainId,
-        tokenIn: fromToken.symbol === 'ETH' ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : fromToken.address,
-        tokenOut: toToken.symbol === 'ETH' ? '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' : toToken.address,
+        tokenIn: fromToken.symbol === 'ETH' ? NATIVE : fromToken.address,
+        tokenOut: toToken.symbol === 'ETH' ? NATIVE : toToken.address,
         amountIn,
         slippageBps: slippagePercentToBps(effectiveSlippage),
       })
@@ -159,16 +163,16 @@ export function useSwapDemo(
   }, [live, validAmount, fromAmount, fromToken, toToken, validSlippage, effectiveSlippage, chainId]);
 
   useEffect(() => {
-    if (!isApproving) return;
+    if (live || !isApproving) return;
     const timer = setTimeout(() => {
       setAuthorized((current) => [...new Set([...current, fromSymbol])]);
       setIsApproving(false);
     }, TRANSACTION_STEP_MS);
     return () => clearTimeout(timer);
-  }, [isApproving, fromSymbol]);
+  }, [isApproving, fromSymbol, live]);
 
   useEffect(() => {
-    if (!transaction || step >= 4) return;
+    if (live || !transaction || step >= 4) return;
     const timer = setTimeout(() => {
       if (step === 3 && transaction.commit && !committed.current) {
         committed.current = true;
@@ -177,22 +181,133 @@ export function useSwapDemo(
       setStep(step + 1);
     }, TRANSACTION_STEP_MS);
     return () => clearTimeout(timer);
-  }, [transaction, step]);
+  }, [transaction, step, live]);
 
-  const reset = () => { setForcedState(null); setTransaction(null); setIsApproving(false); setQuoteError(null); };
+  const reset = () => {
+    setForcedState(null);
+    setTransaction(null);
+    setIsApproving(false);
+    setQuoteError(null);
+    liveBusy.current = false;
+  };
   const updateAmount = (value: string) => { reset(); setFromAmount(value); };
   const selectToken = (side: 'from' | 'to', symbol: string) => {
-    if (!tokens[symbol] || isBusy) return;
+    if (!tokens[symbol] || (transaction !== null && step < 4)) return;
     reset();
     if (side === 'from') { setFromSymbol(symbol); if (toSymbol === symbol) setToSymbol(fromSymbol); }
     else { setToSymbol(symbol); if (fromSymbol === symbol) setFromSymbol(toSymbol); }
   };
-  const invert = () => { if (isBusy) return; reset(); setFromSymbol(toSymbol); setToSymbol(fromSymbol); };
+  const invert = () => {
+    if (transaction !== null && step < 4) return;
+    reset();
+    setFromSymbol(toSymbol);
+    setToSymbol(fromSymbol);
+  };
+
+  const sendUnsigned = async (tx: UnsignedTxDto) => {
+    const hash = await sendTransactionAsync({
+      to: tx.to as `0x${string}`,
+      data: tx.data as `0x${string}`,
+      value: BigInt(tx.value || '0'),
+      gas: tx.gas ? BigInt(tx.gas) : undefined,
+      chainId: tx.chainId,
+    });
+    return hash;
+  };
+
+  const waitStatus = async (cid: number, hash: string) => {
+    for (let i = 0; i < 60; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      try {
+        const status = await getTrade(cid, hash);
+        if (status.status === 'CONFIRMED' || status.status === 'FAILED' || status.status === 'REPLACED') {
+          return status;
+        }
+      } catch {
+        // keep polling
+      }
+    }
+    throw new Error('等待交易确认超时');
+  };
+
+  const startLiveSwap = async () => {
+    if (!validAmount || insufficient || !bestRoute?.quoteId || !validSlippage || liveBusy.current) return;
+    if (!account.address) {
+      setQuoteError('请先连接钱包');
+      return;
+    }
+    if (chainId !== TRADE_ALLOWED_CHAIN_ID) {
+      setQuoteError('真实兑换仅支持 Base Sepolia，请在顶部切换到 Sepolia');
+      return;
+    }
+    liveBusy.current = true;
+    setQuoteError(null);
+    setForcedState(null);
+    setIsApproving(false);
+    setStep(0);
+    setTransaction({ from: fromSymbol, to: toSymbol, paid: numFrom, received, hash: '', nonce: nextNonce.current++, commit: true });
+    try {
+      if (account.chainId !== TRADE_ALLOWED_CHAIN_ID) {
+        await switchChainAsync({ chainId: TRADE_ALLOWED_CHAIN_ID });
+      }
+      const prepared = await prepareTrade({
+        quoteId: bestRoute.quoteId,
+        userAddress: account.address,
+        infiniteApprove: false,
+      });
+      setStep(1);
+      if (prepared.needsApprove && prepared.approveTx) {
+        setIsApproving(true);
+        const approveHash = await sendUnsigned(prepared.approveTx);
+        setTransaction((prev) => (prev ? { ...prev, hash: approveHash } : prev));
+        setStep(2);
+        await reportTrade({
+          chainId: prepared.approveTx.chainId,
+          txHash: approveHash,
+          kind: 'APPROVE',
+          quoteId: prepared.quoteId,
+          userAddress: account.address,
+        });
+        setStep(3);
+        const approveStatus = await waitStatus(prepared.approveTx.chainId, approveHash);
+        setIsApproving(false);
+        if (approveStatus.status !== 'CONFIRMED') {
+          throw new Error(approveStatus.revertReason || '授权交易失败');
+        }
+        setStep(1);
+      }
+      const swapHash = await sendUnsigned(prepared.swapTx);
+      setTransaction((prev) => (prev ? { ...prev, hash: swapHash } : prev));
+      setStep(2);
+      await reportTrade({
+        chainId: prepared.swapTx.chainId,
+        txHash: swapHash,
+        kind: 'SWAP',
+        quoteId: prepared.quoteId,
+        userAddress: account.address,
+      });
+      setStep(3);
+      const swapStatus = await waitStatus(prepared.swapTx.chainId, swapHash);
+      if (swapStatus.status !== 'CONFIRMED') {
+        throw new Error(swapStatus.revertReason || '兑换交易失败');
+      }
+      setStep(4);
+      executeRef.current(fromSymbol, toSymbol, numFrom, received, swapHash);
+    } catch (err: unknown) {
+      setIsApproving(false);
+      setForcedState('failed');
+      setQuoteError(err instanceof ApiError ? err.message : err instanceof Error ? err.message : '兑换失败');
+      setTransaction(null);
+      setStep(0);
+    } finally {
+      liveBusy.current = false;
+    }
+  };
+
   const startTransaction = (commit: boolean) => {
-    if (!validAmount || insufficient || !bestRoute || !validSlippage || isBusy || isApproving) return;
+    if (!validAmount || insufficient || !bestRoute || !validSlippage || (transaction !== null && step < 4) || isApproving) return;
     if (live) {
-      // P5 前：真实模式只展示报价，不模拟成交改余额
-      setQuoteError('真实兑换将在 P5 接入；当前仅支持报价');
+      void startLiveSwap();
       return;
     }
     committed.current = false;
@@ -220,15 +335,15 @@ export function useSwapDemo(
     }
   };
   const act = () => {
-    if (isBusy || isApproving || !validAmount || insufficient || !validSlippage || state === 'quoting') return;
-    if (needsApproval) setIsApproving(true);
+    if ((transaction !== null && step < 4) || isApproving || !validAmount || insufficient || !validSlippage || state === 'quoting') return;
+    if (!live && needsApproval) setIsApproving(true);
     else startTransaction(true);
   };
 
   return {
     fromSymbol, toSymbol, fromAmount, fromToken, toToken, numFrom,
     slippage, setSlippage, customSlippage, setCustomSlippage, effectiveSlippage, validSlippage,
-    routes, bestRoute, received, minimumReceived, state, isBusy, isApproving, step, transaction,
+    routes, bestRoute, received, minimumReceived, state, isBusy: (transaction !== null && step < 4) || isApproving, isApproving, step, transaction,
     quoteError, live, updateAmount, selectToken, invert, selectDemoState, act,
   };
 }

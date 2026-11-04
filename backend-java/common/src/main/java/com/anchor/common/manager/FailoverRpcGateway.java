@@ -72,6 +72,16 @@ public final class FailoverRpcGateway implements RpcGateway {
         return execute(chainId, "eth_call", endpoint -> endpoint.ethCall(to, data));
     }
 
+    @Override
+    public String ethCall(long chainId, String from, String to, String data, java.math.BigInteger value) {
+        return execute(chainId, "eth_call", endpoint -> endpoint.ethCall(from, to, data, value));
+    }
+
+    @Override
+    public java.math.BigInteger estimateGas(long chainId, String from, String to, String data, java.math.BigInteger value) {
+        return execute(chainId, "eth_estimateGas", endpoint -> endpoint.estimateGas(from, to, data, value));
+    }
+
     private <T> T execute(long chainId, String method, RpcCall<T> call) {
         return execute(chainId, method, call, true);
     }

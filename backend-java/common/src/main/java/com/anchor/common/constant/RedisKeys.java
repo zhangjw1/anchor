@@ -58,6 +58,20 @@ public final class RedisKeys {
     }
 
     /**
+     * 按报价单号取完整报价（供构建交易）。
+     */
+    public static String quoteById(String quoteId) {
+        return "anchor:quote:id:" + quoteId;
+    }
+
+    /**
+     * 用户交易追踪记录。
+     */
+    public static String tradeTx(long chainId, String txHash) {
+        return "anchor:trade:" + chainId + ":" + txHash;
+    }
+
+    /**
      * 报价接口按 IP 限流计数。
      */
     public static String quoteRateLimit(String clientIp) {

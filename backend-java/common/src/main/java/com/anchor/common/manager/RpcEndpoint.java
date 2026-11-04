@@ -40,4 +40,14 @@ public interface RpcEndpoint {
      * 对这个节点做一次 eth_call。
      */
     String ethCall(String to, String data) throws Exception;
+
+    /**
+     * 带 from / value 的 eth_call。
+     */
+    String ethCall(String from, String to, String data, java.math.BigInteger value) throws Exception;
+
+    /**
+     * estimateGas。
+     */
+    java.math.BigInteger estimateGas(String from, String to, String data, java.math.BigInteger value) throws Exception;
 }

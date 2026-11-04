@@ -116,6 +116,21 @@ public final class AnchorConstants {
     /** USD 展示用 6 位小数，1 美元 = 1_000_000 微美元。 */
     public static final int USD_MICRO_DECIMALS = 6;
 
+    /** P5a 兑换 deadline：当前时间起多少秒。 */
+    public static final long TRADE_DEADLINE_SECONDS = 120L;
+
+    /** P5a 允许真实准备/上报的链 ID（Base Sepolia）。 */
+    public static final long TRADE_ALLOWED_CHAIN_ID = 84532L;
+
+    /** 交易回执轮询间隔毫秒。 */
+    public static final long TRADE_POLL_INTERVAL_MS = 2_000L;
+
+    /** 交易回执最长轮询次数。 */
+    public static final int TRADE_POLL_MAX_ATTEMPTS = 90;
+
+    /** 交易状态 Redis TTL（小时）。 */
+    public static final long TRADE_STATUS_TTL_HOURS = 24L;
+
     private AnchorConstants() {
     }
 }

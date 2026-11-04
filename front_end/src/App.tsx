@@ -11,12 +11,18 @@ import { ApiError, ConfirmStatus, SwapDto, WatchAddressDto, createWatchAddress, 
 import { isMockMode } from './config/env';
 import { useLiveWallet } from './hooks/useLiveWallet';
 import { usePortfolioTokens } from './hooks/usePortfolioTokens';
-import { NETWORKS } from './mock/initialData';
+import { useChainMetrics } from './hooks/useChainMetrics';
+import { isWagmiChain } from './config/wagmi';
+import { NETWORKS, selectableNetworks } from './mock/initialData';
 import { WatchAddress, SwapTransaction, NetworkConfig, SwapStatus } from './types';
 import { CONFIRMATION_TARGET } from './utils/swap';
 
 const POLL_MS = 3000;
 const MOCK_ADDRESS = '0x94A1F29b3112E849C01132890bF20c1590748920';
+
+function defaultNetwork(mock: boolean): NetworkConfig {
+  return selectableNetworks(!mock)[0] ?? NETWORKS[0];
+}
 
 function shortAddress(address: string) {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
@@ -120,7 +126,16 @@ function toSwap(item: SwapDto, names: Map<string, string>): SwapTransaction {
 export default function App() {
   const mock = isMockMode();
   const liveWallet = useLiveWallet();
-  const [network, setNetwork] = useState<NetworkConfig>(NETWORKS[0]);
+  const [network, setNetwork] = useState<NetworkConfig>(() => defaultNetwork(isMockMode()));
+
+  useEffect(() => {
+    if (mock) {
+      return;
+    }
+    if (!isWagmiChain(network.chainId)) {
+      setNetwork(defaultNetwork(false));
+    }
+  }, [mock, network.chainId]);
   const [watchlist, setWatchlist] = useState<WatchAddress[]>([]);
   const [selectedWatchId, setSelectedWatchId] = useState<string | null>(null);
   const [swaps, setSwaps] = useState<SwapTransaction[]>([]);
@@ -135,6 +150,7 @@ export default function App() {
   selectedAddressRef.current = watchlist.find((item) => item.id === selectedWatchId)?.address;
 
   const userAddress = mock ? mockAddress : (liveWallet.address || '');
+  const chainMetrics = useChainMetrics(network.chainId, !mock);
   const { tokens, setTokens, error: assetError, refresh: refreshAssets } = usePortfolioTokens(
     network.chainId,
     userAddress || undefined,
@@ -224,7 +240,7 @@ export default function App() {
       <Header
         currentNetwork={network}
         onSelectNetwork={setNetwork}
-        behindBlocks={0}
+        behindBlocks={chainMetrics.lagBlocks}
         confirmationTarget={CONFIRMATION_TARGET}
         isSyncing={isStreaming}
         onOpenAccountModal={() => setIsAccountModalOpen(true)}
@@ -291,7 +307,7 @@ export default function App() {
           <RecentSwapsPanel
             swaps={swaps}
             onSelectTx={setActiveTx}
-            latestBlock={latestBlock}
+            latestBlock={chainMetrics.headBlock || latestBlock}
             isStreaming={isStreaming}
             onToggleStreaming={() => setIsStreaming(!isStreaming)}
             explorerUrl={network.explorerUrl}
@@ -319,7 +335,7 @@ export default function App() {
         </section>
       </main>
 
-      <FooterBar />
+      <FooterBar metrics={chainMetrics} mock={mock} />
 
       <TxDetailModal
         tx={activeTx ? swaps.find((item) => item.id === activeTx.id) ?? activeTx : null}

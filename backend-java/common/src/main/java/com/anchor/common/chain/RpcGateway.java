@@ -2,6 +2,7 @@ package com.anchor.common.chain;
 
 import com.anchor.common.domain.AnchorException;
 
+import java.math.BigInteger;
 import java.util.List;
 
 /**
@@ -30,6 +31,17 @@ public interface RpcGateway {
      * 只读合约调用，返回十六进制结果。
      */
     String ethCall(long chainId, String to, String data);
+
+    /**
+     * 带 from / value 的 eth_call（模拟用户交易）。
+     */
+    String ethCall(long chainId, String from, String to, String data, BigInteger value);
+
+    /**
+     * estimateGas。
+     */
+    BigInteger estimateGas(long chainId, String from, String to, String data, BigInteger value);
+
     /**
      * 节点重试耗尽后抛出。
      */

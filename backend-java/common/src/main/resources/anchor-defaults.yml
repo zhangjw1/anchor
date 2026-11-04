@@ -61,5 +61,11 @@ management:
     health:
       probes:
         enabled: true
+  metrics:
+    distribution:
+      percentiles-histogram:
+        rpc.latency: true
+        anchor.quote.latency: true
+        anchor.trade.confirm.latency: true
 logging:
   config: classpath:logback-spring.xml

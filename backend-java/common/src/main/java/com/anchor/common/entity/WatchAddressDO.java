@@ -9,6 +9,7 @@ import java.time.LocalDateTime;
 
 /**
  * watched_address 表的一行。
+ * 激活后地址会写入 Redis watch set，Indexer 按交易 from 过滤是否解析 Swap。
  */
 @TableName("watched_address")
 public class WatchAddressDO {

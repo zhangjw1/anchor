@@ -146,15 +146,36 @@ API 提供 `/ws`。字段名 camelCase，金额是最小单位十进制字符串
 
 `status`：`PENDING` / `CONFIRMED` / `FAILED` / `REPLACED`。`kind`：`APPROVE` / `SWAP`。失败时可带 `revertReason`。
 
-指标每 3 秒一次。`blockNumber` 是 checkpoint，`reorgCount` 是累计次数，`reorgDepth` 是最近一次深度：
+指标约每 3 秒推送一次（与 `StatusMetricsService` 后台缓存刷新同量级）。字段与 REST `GET /api/v1/chains/{chainId}/metrics` 对齐；WS 断开时前端可用该 REST 兜底。
 
 ```json
 {
   "channel": "metrics",
   "type": "METRICS",
   "chainId": 8453,
+  "headBlock": 21433000,
+  "processedBlock": 21432918,
+  "lagBlocks": 82,
   "blockNumber": 21432918,
+  "rpcQps": 12.5,
+  "rpcErrorRate": 0.01,
+  "kafkaLag": 0,
+  "kafkaStale": false,
+  "outboxPending": 0,
   "reorgCount": 1,
   "reorgDepth": 2
 }
 ```
+
+| 字段 | 含义 |
+| --- | --- |
+| `headBlock` | 链头（缓存） |
+| `processedBlock` / `blockNumber` | checkpoint 已扫高度 |
+| `lagBlocks` | `head − processed` |
+| `rpcQps` / `rpcErrorRate` | 后台按 Micrometer 差分计算后缓存 |
+| `kafkaLag` | consumer group `anchor-api` 在 swap/chain 主题上的 lag；查不到可为 `null` |
+| `kafkaStale` | 超过约 15s 未成功刷新 lag 则为 `true` |
+| `outboxPending` | `outbox_event` 中 `PENDING` 条数 |
+| `reorgCount` / `reorgDepth` | Redis 中累计次数与最近深度 |
+
+前端底栏（非 Mock）：未连上 WS 时 Kafka 显示 `—`；已连接且 `kafkaLag == null` 或 `kafkaStale` 时显示「Kafka 异常」；`outboxPending > 0` 显示「待推送 N」。

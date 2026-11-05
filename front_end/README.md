@@ -1,20 +1,15 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# Anchor 前端
 
-# Run and deploy your AI Studio app
+React 19 + Vite + TypeScript + wagmi。详细说明见仓库根目录 [`README.md`](../README.md)。
 
-This contains everything you need to run your app locally.
+## 本地运行
 
-View your app in AI Studio: https://ai.studio/apps/57149047-e641-4766-af69-8f9da72c9c42
+```bash
+npm install
+npm run dev   # http://localhost:3000，开发代理 /api、/ws → 后端
+```
 
-## Run Locally
+- **Live**：连本机 API（默认 `8080`）与 WebSocket，展示真实扫块与指标。
+- **Mock**：本地占位数据；底栏不展示 Kafka 状态。
 
-**Prerequisites:**  Node.js
-
-
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+常用脚本：`npm run build` / `npm run preview` / `npm run lint`。

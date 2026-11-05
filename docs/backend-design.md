@@ -1,6 +1,6 @@
 # Anchor 后端技术方案
 
-> Base 链 DEX Swap 监控 + 兑换面板。本文只定方案，不含代码与接口字段细节。
+> Base 链 DEX Swap 监控 + 兑换面板。实现以 `backend-java/` 为准；Kafka/WS 字段见 `contracts-shared/`。
 
 ## 1. 目标与范围
 
@@ -17,7 +17,7 @@
 | 链上数据索引、交易状态跟踪 | 区块扫描器、确认与 Reorg 模块 |
 | Swap / 报价 / 路由 / Gas | 报价服务、交易服务、L2 Gas 模型 |
 | EVM Log 解析、Uniswap | Swap 解析器（V2/V3/Aerodrome/多跳/聚合器） |
-| Go / Kafka / Redis / PG / 微服务 | 技术栈与进程拆分 |
+| Java / Kafka / Redis / PG / 多模块 | 技术栈与进程拆分 |
 | 地址画像 | 地址簿 + 统计 |
 | Solana（加分） | 链适配层预留，后期实现 |
 
@@ -39,18 +39,17 @@ flowchart LR
 
     subgraph INDEXER["indexer 进程 - 每链一个实例"]
         GW1["RPC 网关"]
-        SC["区块扫描器"]
+        SC["BlockScanner"]
+        PS["Swap 解析器"]
+        IN["入库 + Outbox + checkpoint"]
+        RL["OutboxRelay"]
         CF["确认与 Reorg"]
     end
 
-    subgraph MQ["Kafka"]
-        T1[("raw-blocks")]
+    subgraph MQ["Kafka / Redpanda"]
         T2[("swap-events")]
         T3[("chain-events")]
-    end
-
-    subgraph WORKER["parser 消费者"]
-        PS["Swap 解析器"]
+        OB[("outbox_event 表")]
     end
 
     subgraph APIP["api 进程"]
@@ -59,26 +58,30 @@ flowchart LR
         AS["资产服务"]
         QT["报价服务"]
         TX["交易服务"]
+        CE["ChainEventConsumer"]
         WS["推送网关"]
         GW2["RPC 网关"]
+        SM["StatusMetrics 缓存"]
     end
 
     PG[("PostgreSQL")]
     RD[("Redis")]
-    FE["前端 Next.js + wagmi"]
+    FE["前端 Vite + React + wagmi"]
 
     RPC1 --> GW1
     RPC2 --> GW1
     GW1 --> SC
-    SC --> T1
-    T1 --> PS
-    PS --> PG
-    PS --> T2
-    T2 --> WS
-    SC --> CF
-    CF --> PG
-    CF --> T3
-    T3 --> WS
+    SC --> PS
+    PS --> IN
+    CF --> IN
+    IN --> PG
+    IN --> OB
+    OB --> RL
+    RL --> T2
+    RL --> T3
+    T2 --> CE
+    T3 --> CE
+    CE --> WS
     AB --> RD
     RD --> SC
     FE -->|REST| Q
@@ -86,6 +89,7 @@ flowchart LR
     FE -->|REST| AS
     FE -->|REST| QT
     FE -->|REST| TX
+    FE -->|REST metrics| SM
     WS -->|WebSocket| FE
     Q --> PG
     AB --> PG
@@ -102,16 +106,15 @@ flowchart LR
 
 | 进程 | 职责 | 为什么独立 |
 |---|---|---|
-| **indexer** | 扫块、拉回执、检测 Reorg、更新确认数 | 必须单实例按顺序推进，有状态（checkpoint） |
-| **parser** | 消费原始区块，解析 Swap，落库 | 无状态、可水平扩容，解析逻辑升级可重放 Kafka |
-| **api** | REST + WebSocket，报价、资产、交易 | 面向用户，需低延迟，与扫块压力隔离 |
+| **indexer** | 扫块、解析、入库、OutboxRelay、Reorg；`ScannerLease` 保证同链单活 | 有状态（checkpoint），需顺序推进 |
+| **api** | REST + WebSocket，报价/资产/交易，消费 Kafka 推前端 | 面向用户，与扫块压力隔离 |
 
-> 初期可以 parser 合并进 indexer 进程，通过 Kafka 解耦后再拆，代码结构上先按模块隔离。
+> 解析模块在代码上独立（`parser`），运行时合入 indexer 进程。`raw-blocks` 主题保留契约但不生产。
 
 ### 2.2 数据流与事件流
-- **数据流（落库）**：RPC → 扫描器 → Kafka `raw-blocks` → 解析器 → PG。
-- **事件流（推送）**：解析器/确认模块 → Kafka `swap-events` / `chain-events` → 推送网关 → 前端。
-- **控制流（配置）**：地址簿变更 → Redis 地址集合 → 扫描器实时读取。
+- **数据流（落库）**：RPC → BlockScanner → 解析 → **同一事务**写 PG（swap/hash）+ `outbox_event` + checkpoint。
+- **事件流（推送）**：OutboxRelay → Kafka `swap-events` / `chain-events` → API `ChainEventConsumer`（短 TTL 去重）→ WS → 前端。
+- **控制流（配置）**：地址簿变更 → Redis watch set → 扫描器按 `tx.from` 过滤。
 
 ---
 
@@ -119,39 +122,31 @@ flowchart LR
 
 | 组件 | 选型 | 理由 |
 |---|---|---|
-| 语言 | Go 1.23 | JD 要求；go-ethereum 生态原生 |
-| 链交互 | go-ethereum `ethclient` + `abigen` | 类型安全的合约调用与事件解析 |
-| 消息队列 | Kafka（本地 Redpanda 也可） | JD 要求；支持重放、分区有序 |
-| 缓存 | Redis | 地址集合、报价/余额短缓存、Token 元数据、限流 |
-| 数据库 | PostgreSQL | 关系型 + JSONB 存多跳路径；NUMERIC 存大数 |
-| 推送 | WebSocket（gorilla/websocket 或 nhooyr） | 前端实时更新 |
-| 指标 | Prometheus + Grafana | 状态栏数据来源，同时展示工程能力 |
-| 部署 | docker-compose | 一键拉起 PG/Redis/Kafka/服务 |
-| 前端钱包 | wagmi + viem + RainbowKit | 替换现有 mock 钱包 |
-| Solana（后期） | gagliardetto/solana-go、Yellowstone gRPC、Jupiter API | 适配层 |
+| 语言 | Java 21 | 当前实现栈；Spring Boot 3.3 多模块 |
+| 链交互 | Web3j + 自研 `FailoverRpcGateway` | 多节点故障切换；合约调用与 Log 解析 |
+| 消息队列 | Kafka（本地 Redpanda） | 分区有序；应用侧 Transactional Outbox |
+| 缓存 | Redis | 地址集合、扫块租约、报价/余额短缓存、Token 元数据 |
+| 数据库 | PostgreSQL + Flyway | 关系型；`outbox_event` jsonb；NUMERIC 存大数 |
+| 持久层 | MyBatis-Plus + XML | 简单 CRUD 走 MP；多条件走 XML |
+| 推送 | Spring WebSocket | 前端实时更新 |
+| 指标 | Micrometer + Prometheus + Grafana | 状态栏读缓存；Grafana 看历史 |
+| 部署 | `deploy/docker-compose.yml` | PG/Redis/Redpanda/监控 |
+| 前端钱包 | wagmi + viem | Live 模式真实签名 |
+| Solana（后期） | 适配层预留 | 见路线图 |
 
-### 3.1 建议目录结构
+### 3.1 目录结构（实现）
 
 ```text
 anchor/
 ├─ front_end/
-├─ backend/
-│  ├─ cmd/            # indexer / parser / api 三个入口
-│  ├─ internal/
-│  │  ├─ chain/       # 链注册表、RPC 网关
-│  │  ├─ scanner/     # 区块扫描、checkpoint
-│  │  ├─ parser/      # DexParser 接口及各 DEX 实现
-│  │  ├─ confirm/     # 确认数、Reorg
-│  │  ├─ watchlist/   # 地址簿
-│  │  ├─ asset/       # 余额、价格
-│  │  ├─ quote/       # 报价
-│  │  ├─ tx/          # 交易构建、模拟、广播、追踪
-│  │  ├─ push/        # WebSocket 网关
-│  │  ├─ metrics/
-│  │  └─ store/       # PG / Redis / Kafka 封装
-│  ├─ contracts/      # ABI 与 abigen 生成代码
-│  └─ configs/        # chains.yaml 等
-├─ deploy/            # docker-compose、Grafana 面板
+├─ backend-java/
+│  ├─ common/         # 实体、RPC、链配置、Mapper、DTO
+│  ├─ indexer/        # BlockScanner、入库、OutboxRelay、Reorg
+│  ├─ api/            # REST、WS、报价/交易、ChainEventConsumer
+│  └─ parser/         # CompositeSwapParser 及各 DEX 实现
+├─ db/migrations/     # Flyway（含 V5 outbox_event）
+├─ contracts-shared/  # chains.yaml、Kafka/WS 契约
+├─ deploy/
 └─ docs/
 ```
 
@@ -162,7 +157,7 @@ anchor/
 | # | 模块 | 职责 | 不负责 |
 |---|---|---|---|
 | 1 | **RPC 网关** | 多节点池、按节点限流、超时、重试、故障切换、QPS/错误率统计 | 业务逻辑 |
-| 2 | **区块扫描器** | 按 checkpoint 顺序拉块；校验 parentHash；按监控地址过滤交易；批量拉回执；投递 Kafka | 解析 Swap |
+| 2 | **区块扫描器** | 按 checkpoint 顺序拉块；`max-catchup-blocks` 跳块；并发 getBlock；校验 parentHash；按监控地址过滤；**写入 outbox**（不直连 Kafka） | 解析 Swap |
 | 3 | **Swap 解析器** | `DexParser` 接口；识别 DEX、方向、净输入/输出、多跳路径、聚合器；Token 元数据缓存 | 确认状态 |
 | 4 | **确认与 Reorg** | 新块到来时更新确认数；≥ N 置为已确认；检测分叉，回滚受影响记录，从分叉点重扫 | 推送实现 |
 | 5 | **地址簿** | 监控地址增删改、标签；统计 Swap 次数/最近活跃；同步地址集合到 Redis；可选回填最近 N 块 | 扫块 |
@@ -170,7 +165,8 @@ anchor/
 | 7 | **报价服务** | QuoterV2 对 4 个费率档并发 `eth_call`，选最优；价格影响；按滑点算最少收到；Gas 估算（含 L1 data fee） | 签名 |
 | 8 | **交易服务** | 授权检查与 approve 构建；Swap calldata 构建；模拟；nonce 管理；广播；状态追踪（Pending/已确认/失败/被替换） | 私钥托管（模式 A） |
 | 9 | **推送网关** | WebSocket 连接管理、订阅（按地址/交易哈希/指标）、心跳、断线补发 | 数据计算 |
-| 10 | **运行指标** | 最新块、扫描延迟、Kafka lag、RPC QPS/错误率、Reorg 次数；Prometheus 暴露 + 定时推前端 | — |
+| 10 | **运行指标** | 头块/已扫/落后、Kafka lag、`kafkaStale`、`outboxPending`、RPC QPS/错误率、Reorg；后台刷新缓存，REST/WS 只读 | — |
+| 11 | **OutboxRelay** | 领取 PENDING（SKIP LOCKED）、投递 Kafka、失败退避；同批失败即停保序 | 业务入库 |
 
 ### 4.1 解析器关键规则
 - **净流向以 ERC20 Transfer 为准**：V3 `Swap` 事件的 sender/recipient 通常是 Router，不是用户。以"监控地址作为 from 的 Transfer 总和"为付出、"to 为监控地址的 Transfer 总和"为收到；ETH 部分用 `tx.value` 和 WETH `Withdrawal` 事件补齐。
@@ -258,26 +254,28 @@ stateDiagram-v2
 sequenceDiagram
     participant S as 扫描器
     participant R as RPC 网关
-    participant K as Kafka
     participant P as 解析器
     participant DB as PG
+    participant O as OutboxRelay
+    participant K as Kafka
+    participant C as API Consumer
     participant W as 推送网关
     participant F as 前端
     S->>R: 获取区块 N（含交易）
     S->>S: 校验 parentHash == 已存 N-1 hash
     S->>S: 过滤 tx.from ∈ 监控地址（Redis 集合）
     S->>R: 批量获取命中交易回执
-    S->>K: raw-blocks（块头 + 命中交易 + 回执）
-    S->>DB: 更新 checkpoint = N
-    K->>P: 消费
-    P->>P: 识别 DEX / 计算净流向 / 方向 / 路径
-    P->>DB: Upsert（幂等键）
-    P->>K: swap-events
-    K->>W: 消费
-    W->>F: 推送新 Swap（状态：确认中 1/10）
+    S->>P: 进程内解析 DEX / 净流向 / 路径
+    S->>DB: 同事务：swap + outbox PENDING + checkpoint=N
+    O->>DB: claimPending FOR UPDATE SKIP LOCKED
+    O->>K: 投递 swap-events / chain-events
+    O->>DB: markSent
+    K->>C: 消费（Caffeine 短 TTL 去重）
+    C->>W: 推送
+    W->>F: 新 Swap（确认中）
 ```
 
-> 注意 checkpoint 与 Kafka 投递的顺序：先投递成功再写 checkpoint（at-least-once），由解析器幂等兜底。
+> checkpoint 与 outbox **同事务提交**；Kafka 由 OutboxRelay 异步至少一次投递。Kafka 故障不阻塞扫块，积压看 `outboxPending`。
 
 ### 6.2 确认与 Reorg
 ```mermaid
@@ -440,6 +438,7 @@ erDiagram
     SWAP ||--o{ SWAP_HOP : path
     CHAIN ||--o{ BLOCK_HASH : recent
     CHAIN ||--o{ USER_TX : tracks
+    CHAIN ||--o{ OUTBOX_EVENT : enqueues
 ```
 
 | 实体 | 说明 |
@@ -449,8 +448,9 @@ erDiagram
 | 近期区块 hash | 最近 N 块的 hash，用于 Reorg 检测 |
 | Token | 地址、symbol、decimals，懒加载 + 缓存 |
 | 监控地址 | 地址、标签、统计 |
-| Swap | 一次 Swap 行为：交易、DEX、方向、净输入/输出、USD 价值、确认状态 |
+| Swap | 一次 Swap：交易、DEX、方向、净输入/输出、确认状态 |
 | Swap 路径 | 多跳的每一跳 |
+| Outbox 事件 | `PENDING`/`SENT`；topic、msg_key、payload、attempts、next_attempt_at |
 | 用户交易 | 兑换面板发起的 approve / swap 交易及状态 |
 
 金额统一按最小单位存 `NUMERIC(78,0)`，展示时再按 decimals 换算。
@@ -463,12 +463,14 @@ erDiagram
 | 风险 | 措施 |
 |---|---|
 | 进程重启丢进度 | checkpoint 持久化，重启从 checkpoint+1 继续 |
-| 重复消费 | 幂等键 Upsert |
-| RPC 限流/故障 | 令牌桶限速、指数退避重试、多节点切换、熔断 |
-| 扫描落后 | 追块模式批量拉取（并发拉块、顺序提交） |
-| Reorg | parentHash 校验 + 回溯 + 回滚标记 + 重扫 |
-| 解析逻辑 bug | Kafka 保留原始块，修复后重置 offset 重放 |
-| WS 断线 | 客户端带最后事件序号重连，服务端补发 |
+| 重复入库 | 幂等键 Upsert `(chainId, txHash, logIndex)` |
+| 重复推送 | Outbox 至少一次 + API Caffeine 短 TTL 去重 |
+| Kafka 故障 | 扫块只写 outbox；Relay 退避重试；同批失败 break 保序 |
+| 多 Indexer | `ScannerLease` 单活扫块；Relay `SKIP LOCKED` 分片领取 |
+| RPC 限流/故障 | 退避重试、多节点切换 |
+| 扫描落后 | `max-catchup-blocks` 跳到近头；`catchup-batch-size` 并发 getBlock |
+| Reorg | parentHash 校验 + 回溯 + 回滚标记 + 重扫（事件同样走 outbox） |
+| WS 断线 | 序号补发；过期则 `RESYNC` + REST 重拉 |
 | 新增监控地址 | 可选回填最近 N 块 |
 
 ### 9.2 安全
@@ -485,16 +487,14 @@ erDiagram
 
 | 指标 | 用途 | 展示位置 |
 |---|---|---|
-| 最新链上块 / 已处理块 / 延迟块数 | 扫描健康度 | 状态栏 |
-| Kafka consumer lag | 解析积压 | 状态栏 |
-| RPC QPS、错误率、P99 延迟（按节点） | 节点质量 | 状态栏 + Grafana |
+| headBlock / processedBlock / lagBlocks | 扫描健康度 | 状态栏 + REST metrics |
+| kafkaLag / kafkaStale | 消费积压与 Admin 可用性 | 状态栏 |
+| outboxPending | 待推送事件积压 | 状态栏 |
+| RPC QPS、错误率 | 节点质量（后台缓存，防采样互相干扰） | 状态栏 + Grafana |
 | Reorg 次数、最大深度 | 链稳定性 | 状态栏 |
-| 每块解析 Swap 数、解析失败数 | 解析质量 | Grafana |
-| 报价延迟、报价失败率 | 报价服务 | Grafana |
-| 交易成功率、平均确认时间 | 交易服务 | Grafana |
-| WS 连接数 | 推送网关 | Grafana |
+| 扫块/解析/Outbox/Kafka DLT 等 | 工程质量 | Prometheus / Grafana |
 
-日志统一结构化（JSON），带 chainId、blockNumber、txHash 便于排查。
+日志带 chainId、blockNumber、txHash；状态栏数据由 `StatusMetricsService` 定时刷新缓存，请求线程不直打 RPC/Kafka Admin。
 
 ---
 
@@ -502,15 +502,15 @@ erDiagram
 
 | 阶段 | 内容 | 交付物 | 页面可见效果 |
 |---|---|---|---|
-| **P0** | 工程骨架 | docker-compose（PG/Redis/Kafka）、配置、日志 | — |
-| **P1** | RPC 网关、扫描器 + checkpoint、Uniswap V3 解析、地址簿、Swap 查询 | indexer + api 最小版 | Watchlist 和 RECENT SWAPS 显示真实数据（刷新可见） |
-| **P2** | 确认与 Reorg（两级确认）、Kafka 解耦、WebSocket | 事件流打通 | 新 Swap 实时出现，确认数跳动，已最终确认图标，回滚行划线 |
-| **P3** | Uniswap V2、Aerodrome、多跳、聚合器识别 | 多个 DexParser | DEX 列、路径、聚合器标签真实 |
-| **P4** | 真实钱包接入、资产服务、报价服务 | wagmi 替换 mock | 我的钱包真实余额；输入数量出真实报价 |
-| **P5a** | 交易服务 + 模式 A（用户钱包签名），Base Sepolia | 签名器接口 + ClientSigner | 步骤条走真实流程 |
-| **P5b** | 模式 B（后端热钱包）+ nonce 管理 + 加速/取消，面板加模式开关 | HotWalletSigner | 可切换签名方式；交易中可加速/取消 |
-| **P6** | 指标与 Grafana | Prometheus 面板 | 状态栏真实指标 |
-| **P7（第一版不实现）** | Solana 适配：Yellowstone 订阅 + Jupiter 报价 + Phantom | 第二条链 | 链选择器可切 Solana |
+| **P0** ✅ | 工程骨架 | docker-compose、配置、日志 | — |
+| **P1** ✅ | RPC 网关、扫描器 + checkpoint、解析、地址簿、Swap 查询 | indexer + api | Watchlist / RECENT SWAPS 真实数据 |
+| **P2** ✅ | 确认与 Reorg、Outbox→Kafka、WebSocket | 事件流打通 | 实时 Swap、确认跳动、reorg |
+| **P3** ✅ | V2 / Aerodrome / 多跳 / 聚合器 | 多个 Parser | DEX、路径、聚合器标签 |
+| **P4** ✅（主路径） | 钱包、资产、报价 | wagmi + Quote API | 余额与报价 |
+| **P5a** ✅ | 模式 A 用户钱包签名（Sepolia） | prepare / report | 步骤条真实流程 |
+| **P5b** | 模式 B 热钱包 | 待做 | — |
+| **P6** ✅（主路径） | 指标缓存 + Grafana 基建 | StatusMetrics + Prometheus | 状态栏真实指标 |
+| **P7** | Solana 等 | 见 `roadmap-tasks.md` | — |
 
 建议每个阶段结束写一篇技术总结（遇到的坑、取舍），作为面试素材。
 

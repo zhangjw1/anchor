@@ -43,7 +43,12 @@ public class OutboxServiceImpl implements OutboxService {
         enqueue(KafkaConstants.CHAIN_EVENTS, events);
     }
 
+    /**
+     * @param topic Kafka 主题常量
+     * @param events SwapEventDTO 或 ChainEventDTO 列表；空或 Kafka 关闭时直接返回
+     */
     private void enqueue(String topic, List<?> events) {
+        // Kafka 未启用时不写 outbox，避免堆积无法投递的 PENDING
         if (!kafkaEnabled || events == null || events.isEmpty()) {
             return;
         }

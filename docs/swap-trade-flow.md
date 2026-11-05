@@ -9,7 +9,7 @@
 | | A. 监控里的 Swap（Indexer） | B. 兑换面板里的 Swap（Trade / P5a） |
 |---|---|---|
 | 是什么 | 扫块解析出的 DEX 交换事件 | 用户在页面上主动询价并兑换 |
-| 入口 | Indexer → Parser → 表 `swap` / Kafka | `quotes` → `prepare` → 钱包签名 → `report` |
+| 入口 | Indexer 内解析 → 表 `swap` + outbox → Kafka → WS | `quotes` → `prepare` → 钱包签名 → `report` |
 | 页面表现 | RECENT SWAPS、确认进度 | 步骤条：授权 → 兑换 → 确认 |
 | 本文范围 | 仅作对照 | **主体** |
 

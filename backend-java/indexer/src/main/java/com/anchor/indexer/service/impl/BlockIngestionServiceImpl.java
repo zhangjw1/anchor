@@ -27,7 +27,8 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 同一事务内写区块哈希、交换、路径跳和确认状态。
+ * 区块入库：同一事务内写区块哈希、swap/hop、确认事件 outbox、推进 checkpoint。
+ * Kafka 不在此同步发送，由 OutboxRelay 异步投递，避免 MQ 故障卡住扫块。
  */
 @Service
 public class BlockIngestionServiceImpl implements BlockIngestionService {
@@ -53,16 +54,27 @@ public class BlockIngestionServiceImpl implements BlockIngestionService {
         this.settings = settings;
     }
 
+    /**
+     * @param chain 当前链定义
+     * @param block 本块头与交易
+     * @param swaps 本块解析出的交换（可为 empty）
+     * @param finalizedBlock 执行层/共识层已最终确认高度，用于修剪旧哈希与确认状态
+     */
     @Override
     @Transactional(rollbackFor = Exception.class)
     public BlockIngestDTO persist(ChainDefinition chain, ChainBlock block, List<SwapParser.ParsedSwap> swaps, long finalizedBlock) {
+        // 1) 区块哈希入库，供后续 parentHash 校验与 reorg
         blockHashMapper.save(chain.chainId(), block.number(), block.hash(), block.parentHash(), AnchorConstants.ACTOR_INDEXER);
         pruneHashes(chain.chainId(), block.number(), finalizedBlock);
+        // 2) swap / hop 幂等写入
         writeSwaps(chain.chainId(), swaps);
+        // 3) 按本块推进确认状态，得到 CONFIRMATION 事件
         List<ChainEventDTO> confirmations = confirmationService.apply(chain, block.number(), finalizedBlock);
         List<SwapEventDTO> swapEvents = swaps.stream().map(SwapEventDTO::from).toList();
+        // 4) 事件入 outbox（与 checkpoint 同事务）；Kafka 关闭时 enqueue 为空操作
         outboxService.enqueueSwaps(swapEvents);
         outboxService.enqueueChain(confirmations);
+        // 5) 最后推进 checkpoint：事务提交前 Kafka 未 ACK 也不阻塞扫块
         checkpointMapper.advance(chain.chainId(), block.number(), block.hash(), AnchorConstants.ACTOR_INDEXER);
         return new BlockIngestDTO(swaps, confirmations);
     }

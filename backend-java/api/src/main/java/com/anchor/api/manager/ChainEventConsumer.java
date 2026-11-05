@@ -40,9 +40,13 @@ public class ChainEventConsumer {
                 .build();
     }
 
+    /**
+     * @param payload Kafka 消息体，JSON 对应 SwapEventDTO
+     */
     @KafkaListener(topics = KafkaConstants.SWAP_EVENTS, groupId = AnchorConstants.KAFKA_GROUP_API)
     public void onSwap(String payload) throws Exception {
         SwapEventDTO event = objectMapper.readValue(payload, SwapEventDTO.class);
+        // outbox 至少一次投递；短 TTL 内重复消息直接跳过，避免 WS 抖动
         if (!remember(swapKey(event))) {
             log.debug("Skip duplicate swap txHash={} logIndex={}", event.txHash(), event.logIndex());
             return;
@@ -50,6 +54,9 @@ public class ChainEventConsumer {
         webSocketPushService.onSwap(event);
     }
 
+    /**
+     * @param payload Kafka 消息体，JSON 对应 ChainEventDTO（CONFIRMATION / REORG）
+     */
     @KafkaListener(topics = KafkaConstants.CHAIN_EVENTS, groupId = AnchorConstants.KAFKA_GROUP_API)
     public void onChain(String payload) throws Exception {
         ChainEventDTO event = objectMapper.readValue(payload, ChainEventDTO.class);
@@ -60,15 +67,20 @@ public class ChainEventConsumer {
         webSocketPushService.onChain(event);
     }
 
-    /** @return true 表示首次见到，应继续处理 */
+    /**
+     * @param key 去重键
+     * @return true 表示首次见到，应继续处理；false 表示窗口内重复
+     */
     boolean remember(String key) {
         return seen.asMap().putIfAbsent(key, PRESENT) == null;
     }
 
+    /** swap 幂等键：chainId + txHash + logIndex */
     static String swapKey(SwapEventDTO event) {
         return event.chainId() + "|swap|" + event.txHash() + "|" + event.logIndex();
     }
 
+    /** 确认按 type+txHash+block；reorg 按区间，避免不同事件互相误伤 */
     static String chainKey(ChainEventDTO event) {
         if (KafkaConstants.REORG.equals(event.type())) {
             return event.chainId() + "|reorg|" + event.fromBlock() + "|" + event.toBlock();

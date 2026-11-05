@@ -121,7 +121,11 @@ public class StatusMetricsService {
         node.put("reorgDepth", view.reorgDepth());
     }
 
-    /** REST / 测试用快照：只读缓存，不阻塞。 */
+    /**
+     * REST / WS 共用快照：只读后台缓存，不在请求线程打 RPC/Kafka Admin。
+     *
+     * @param chainId 链 ID
+     */
     public ChainMetricsVO snapshot(long chainId) {
         long processed = processedBlock(chainId);
         long head = headCache.computeIfAbsent(chainId, id -> new AtomicLong(processed)).get();

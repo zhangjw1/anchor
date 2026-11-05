@@ -172,7 +172,11 @@ public class BlockScanner implements ChainScanner {
     }
 
     /**
-     * 解析本块中命中监控地址的交换，发布成功后才推进检查点。
+     * 处理单块：校验父哈希 → 解析监控地址 Swap → 同事务入库/outbox/checkpoint。
+     *
+     * @param chain 当前链
+     * @param block 已拉取的区块（含交易列表）
+     * @return 下一步动作：ingested / rewound / paused
      */
     public ScanStepDTO process(ChainDefinition chain, ChainBlock block) {
         MDC.put("chainId", String.valueOf(chain.chainId()));

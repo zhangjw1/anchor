@@ -1,6 +1,6 @@
 # Kafka 主题
 
-P2 生产 `swap-events` 和 `chain-events`。解析仍在 indexer 进程内完成，落库并发送成功后才推进 checkpoint。`raw-blocks` 只保留格式，本期不生产、不消费。消息体是 JSON，key 和 value 都使用 UTF-8 字符串。Java 与 Go 共用。
+生产 `swap-events` 与 `chain-events`。解析在 **indexer 进程内**完成：`BlockIngestionServiceImpl` / `ReorgServiceImpl` 在**同一 DB 事务**里写业务表 + `outbox_event` + 推进 checkpoint；**OutboxRelay** 再异步投递 Kafka（`claimPending` + `FOR UPDATE SKIP LOCKED`，同批失败即停以保序）。`raw-blocks` 只保留格式，本期不生产、不消费。消息体 JSON，key/value 均为 UTF-8。`anchor.kafka.enabled=false` 时不入队、不 relay。API 消费失败经 DefaultErrorHandler 进入 `*.DLT`。
 
 ## raw-blocks
 
@@ -45,7 +45,7 @@ P2 生产 `swap-events` 和 `chain-events`。解析仍在 indexer 进程内完�
 
 ## swap-events
 
-indexer 在 Swap 落库后生产。新入库和回滚后再次入库都发。
+Indexer 落库后写入 outbox，由 OutboxRelay 投递。新入库和回滚后再次入库都会发。
 
 | 项 | 值 |
 | --- | --- |
@@ -100,7 +100,7 @@ indexer 在 Swap 落库后生产。新入库和回滚后再次入库都发。
 
 ## chain-events
 
-indexer 的确认模块生产。`FINALIZED` 之后不再发送。
+确认推进与 Reorg 时写入 outbox，由 OutboxRelay 投递。`FINALIZED` 之后不再发送确认事件。
 
 | 项 | 值 |
 | --- | --- |

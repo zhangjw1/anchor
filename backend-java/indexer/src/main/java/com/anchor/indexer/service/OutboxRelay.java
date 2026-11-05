@@ -47,6 +47,10 @@ public class OutboxRelay {
                 .register(meterRegistry);
     }
 
+    /**
+     * 定时领取 PENDING 并投递。事务内持有行锁，多实例靠 SKIP LOCKED 分片。
+     * 无 KafkaTemplate 时直接返回，绝不 markSent，避免静默丢事件。
+     */
     @Scheduled(fixedDelayString = "${anchor.outbox.relay-delay-ms:500}")
     @Transactional(rollbackFor = Exception.class)
     public void relay() {
@@ -60,6 +64,7 @@ public class OutboxRelay {
         if (batch.isEmpty()) {
             return;
         }
+        // 同批按 id 顺序发送；任一条失败即停，避免同 key 后发先到
         for (OutboxEventDO row : batch) {
             if (!deliver(row, now, template)) {
                 break;

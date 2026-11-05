@@ -1,10 +1,10 @@
 # Anchor
 
-**Base DEX Swap & Mempool Monitor** — 实时链上 Swap 监控 + 钱包地址追踪 + 余额对账 + 即时 DEX 聚合报价。
+**Base DEX Swap Monitor** — 实时链上 Swap 监控 + 钱包地址追踪 + 余额对账 + 即时 DEX 报价兑换。
 
-Anchor 是一个面向链上交易者的 Web 应用：用户不需要盯着一堆区块浏览器标签页，而是把「关注的地址在做什么、什么时候成交、成交在什么价格」实时呈现在一个界面里。
+Anchor 面向链上交易者：把「关注地址在做什么、何时成交、成交价」实时呈现在一个界面，并支持模式 A（用户钱包签名）询价兑换。
 
-> 当前状态：前端已完成可交互原型（Mock 数据驱动），后端技术方案已成型、待实现。详见 [`docs/backend-design.md`](docs/backend-design.md)。
+> 当前状态：Java 后端（Indexer + API）与 Vite 前端 Live/Mock 双模式已可联调；扫块经 Transactional Outbox 投递 Kafka，状态栏与 RECENT SWAPS 可走真实数据。设计见 [`docs/backend-design.md`](docs/backend-design.md)。
 
 ![Anchor 桌面端界面](front_end/artifacts/desktop.png)
 
@@ -12,73 +12,83 @@ Anchor 是一个面向链上交易者的 Web 应用：用户不需要盯着一�
 
 | 能力 | 说明 |
 | --- | --- |
-| Swap 实时流 | 按区块推送最近的 Swap 事件，带方向（BUY/SELL）、DEX 来源、金额与 Gas |
-| 地址监控 | 维护 Watchlist（WATCH / ROUTER / MEV / WHALE / KOL 标签），只看关注对象的成交 |
-| 确认状态机 | 展示 `confirming → finalized` 流程，并处理 reorg 回滚提示 |
-| 余额对账 | 钱包持仓与链上余额对比，暴露差异而非"看起来对得上" |
-| 即时兑换 | 代币对选择、聚合器路由（1inch / Uniswap V3 / Aerodrome / Curve / SushiSwap …）、成交步骤反馈 |
-| 交易详情 | 单笔交易拆解：路由 hops、gas、区块号、收发地址 |
-| 多链切换 | 配置驱动的网络注册表（Base / 其他 EVM 链 / Solana 适配策略） |
-| 响应式 | 桌面三栏布局，移动端切换为 Tab 视图 |
-
-<p align="center">
-  <img src="front_end/artifacts/mobile.png" width="300" alt="移动端布局" />
-</p>
+| Swap 实时流 | 扫块解析 Watchlist 地址的 DEX Swap，经 Outbox → Kafka → WS 推送 |
+| 地址监控 | Watchlist（WATCH / ROUTER / MEV / WHALE / KOL），按 `tx.from` 过滤 |
+| 确认状态机 | `CONFIRMING → CONFIRMED → FINALIZED`，处理 reorg |
+| 余额对账 | 钱包持仓与链上余额对比 |
+| 即时兑换 | Uniswap V3 报价 / prepare / 钱包签名 / report（P5a） |
+| 状态栏 | 头块、已扫、落后、RPC QPS、Kafka lag / outbox 待推送 |
+| 响应式 | 桌面三栏；移动端 Tab |
 
 ## 仓库结构
 
 ```
 anchor/
-├── docs/
-│   └── backend-design.md     # 后端技术方案：架构、模块边界、数据模型、可靠性、路线图
-└── front_end/                # React + TypeScript + Vite 前端原型
-    ├── src/
-    │   ├── App.tsx            # 布局与状态编排
-    │   ├── components/        # Header / Watchlist / SwapPanel / TxDetailModal …
-    │   ├── hooks/             # useSwapDemo：模拟实时数据流
-    │   ├── mock/              # 初始 Mock 数据与网络配置
-    │   ├── types/             # 领域模型（SwapTransaction / WatchAddress / Token …）
-    │   └── utils/             # 格式化、确认数、Hash 生成等纯函数
-    ├── scripts/verify-ui.cjs  # 界面自检脚本
-    └── artifacts/             # 界面截图
+├── backend-java/           # Java 21 Maven 多模块
+│   ├── common/             # 实体、RPC、解析契约、MyBatis、配置
+│   ├── indexer/            # 扫块、入库、OutboxRelay、Reorg
+│   ├── api/                # REST + WebSocket + 报价/交易
+│   └── parser/             # Swap 解析实现（被 indexer 引用）
+├── db/migrations/          # Flyway SQL（含 V5 outbox_event）
+├── contracts-shared/       # chains.yaml、Kafka/WS 契约
+├── deploy/                 # docker-compose：PG / Redis / Redpanda / 监控
+├── docs/                   # 设计与路线图
+└── front_end/              # React 19 + Vite + wagmi
 ```
 
 ## 本地运行
 
-前置条件：Node.js 18+
+### 基础设施
+
+```bash
+cd deploy
+docker compose up -d
+```
+
+默认：Postgres `5432`、Redis、Redpanda 对外 `19092`。若本机 `localhost:19092` 被 WSL/代理劫持，在 `deploy/.env` 设置 `KAFKA_ADVERTISE_HOST=<本机 LAN IP>` 后重建 Redpanda，应用侧 `KAFKA_BOOTSTRAP` 指向同一地址。
+
+### 后端
+
+前置：JDK 21、Maven 3.8+。
+
+```bash
+cd backend-java
+mvn -pl api,indexer -am package -DskipTests
+# API（8080）与 Indexer（8081）分别启动；具体 main 类见各模块 bootstrap
+```
+
+常用配置：`anchor.kafka.enabled`、`anchor.scanner.max-catchup-blocks`（默认 2000）、`anchor.scanner.catchup-batch-size`（默认 50）。
+
+### 前端
 
 ```bash
 cd front_end
 npm install
-cp .env.example .env.local   # 填入 GEMINI_API_KEY
-npm run dev                  # http://localhost:3000
+npm run dev    # http://localhost:3000，代理 /api 与 /ws
 ```
 
-常用脚本：
-
-```bash
-npm run build    # 生产构建
-npm run preview  # 预览构建产物
-npm run lint     # TypeScript 类型检查（tsc --noEmit）
-```
-
-`GEMINI_API_KEY` 仅用于 AI 相关调用，前端交互原型本身可在无密钥的情况下浏览。**任何密钥都不要提交进仓库**：`.env*` 已被 `.gitignore` 忽略，只有 `.env.example` 会入库。
+Live 模式连真实后端；Mock 模式用本地占位数据（见 `front_end` 内环境开关）。`GEMINI_API_KEY` 仅可选 AI 能力，**勿提交密钥**。
 
 ## 技术栈
 
-**前端**：React 19 · TypeScript · Vite · Tailwind CSS 4 · Motion · lucide-react
-**后端（规划）**：见技术方案，围绕区块订阅、事件解析、确认与 reorg 处理、报价聚合分层设计
+**前端**：React 19 · TypeScript · Vite · Tailwind · wagmi  
+**后端**：Java 21 · Spring Boot 3.3 · MyBatis-Plus · Flyway · Kafka(Redpanda) · Redis · PostgreSQL · Micrometer
 
 ## 设计文档
 
-- [`docs/backend-design.md`](docs/backend-design.md) — 目标与范围、进程拆分、数据流、模块职责、确认策略、Swap 入库 / reorg / 报价 / 授权兑换流程、多链设计、实体模型、可靠性与安全、可观测性、分阶段路线、风险与待定问题
-- [`docs/chains-yaml.md`](docs/chains-yaml.md) — `chains.yaml` 各字段含义与在系统中的用途
-- [`docs/p5a-sepolia-checklist.md`](docs/p5a-sepolia-checklist.md) — P5a（用户钱包签名兑换）Sepolia 联调清单
+- [`docs/backend-design.md`](docs/backend-design.md) — 架构、Outbox、确认/reorg、可靠性
+- [`docs/swap-trade-flow.md`](docs/swap-trade-flow.md) — P5a 询价兑换
+- [`contracts-shared/kafka-topics.md`](contracts-shared/kafka-topics.md) — Kafka 契约
+- [`contracts-shared/ws-messages.md`](contracts-shared/ws-messages.md) — WebSocket 契约
+- [`docs/chains-yaml.md`](docs/chains-yaml.md) — 链配置
+- [`docs/roadmap-tasks.md`](docs/roadmap-tasks.md) — 后续任务拆分
+- [`docs/p5a-sepolia-checklist.md`](docs/p5a-sepolia-checklist.md) — Sepolia 联调清单
 
-## Roadmap
+## Roadmap（摘要）
 
-- [x] 前端交互原型（Mock 数据流）
-- [ ] 后端区块订阅与 Swap 解析器
-- [ ] 真实钱包连接与签名流程
-- [ ] 聚合器报价接入（模式 A：用户钱包签名）
-- [ ] 多链注册表落地（EVM 主网 / L2 / Solana）
+- [x] 前端 Mock 原型
+- [x] Indexer 扫块 / Swap 解析 / checkpoint / reorg
+- [x] Transactional Outbox + Kafka + API WS
+- [x] 状态栏指标（含 outboxPending / kafkaStale）
+- [x] P5a 用户钱包签名兑换（Sepolia）
+- [ ] 压测与告警、限价单等（见 `docs/roadmap-tasks.md`）

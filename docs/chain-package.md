@@ -9,7 +9,7 @@
 | 配置 | `ChainDefinition`、`ChainRegistry`、`YamlChainRegistry`、`AnchorSettings` | 来自 `chains.yaml`，描述这条链怎么配置 |
 | 链上数据 | `ChainBlock`、`ChainTransaction`、`ChainReceipt`、`ChainLog` | 从 RPC 读回来的区块与执行结果 |
 | 读取与解析 | `RpcGateway`、`ChainScanner`、`SwapParser` | 扫块、拉回执、解析交换 |
-| 交易路径占位 | `Quoter`、`TxBuilder`、`Signer`、`TxTracker` | 只有接口，尚未实现 |
+| 交易路径（P5a） | `Quoter`、`TxBuilder`、`Signer`、`TxTracker` | 接口在 common；实现见下表 |
 
 `ChainDefinition` 和另外四个 record 性质不一样：前者是「这条链怎么配」，后者是「链上实际发生了什么」。
 
@@ -21,6 +21,9 @@
 | `RpcGateway` | `common.manager.FailoverRpcGateway`（限流、重试、节点切换） |
 | `ChainScanner` | `indexer.scan.BlockScanner` |
 | `SwapParser` | `parser.swap.CompositeSwapParser`（汇总 `parser.swap.hop` 下各协议的 `DexHopParser`） |
+| `Quoter` | `UniswapV3Quoter`（api/common 报价路径） |
+| `TxBuilder` | `SwapRouterTxBuilder`（exactInputSingle + multicall） |
+| 签名 | 模式 A：浏览器钱包（wagmi）；后端不持私钥 |
 
 ```mermaid
 flowchart TB
@@ -34,9 +37,8 @@ flowchart TB
     RG --> SC[ChainScanner]
     SC --> SP
 
-    Q[Quoter] --> TB[TxBuilder]
-    TB --> SG[Signer]
-    SG --> TT[TxTracker]
+    Q[UniswapV3Quoter] --> TB[SwapRouterTxBuilder]
+    TB --> WALLET[用户钱包签名]
 ```
 
 ## 2. 数据模型：区块、交易、回执、日志

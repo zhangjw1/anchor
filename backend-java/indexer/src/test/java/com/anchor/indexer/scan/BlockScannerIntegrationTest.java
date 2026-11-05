@@ -14,12 +14,9 @@ import com.anchor.common.dao.SwapMapper;
 import com.anchor.common.entity.SwapDO;
 import com.anchor.common.domain.ConfirmStatusEnum;
 import com.anchor.common.domain.SwapDirectionEnum;
-import com.anchor.common.dto.ChainEventDTO;
-import com.anchor.common.dto.SwapEventDTO;
 import com.anchor.indexer.bootstrap.IndexerApplication;
 import com.anchor.indexer.dto.ScanStepDTO;
 import com.anchor.indexer.service.BlockIngestionService;
-import com.anchor.indexer.service.ChainEventPublishService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -39,12 +36,9 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
 import java.math.BigInteger;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -90,8 +84,6 @@ class BlockScannerIntegrationTest {
     @Autowired
     private ScriptedRpcGateway rpc;
     @Autowired
-    private RecordingPublisher publisher;
-    @Autowired
     private JdbcTemplate jdbc;
     @Autowired
     private StringRedisTemplate redis;
@@ -102,10 +94,10 @@ class BlockScannerIntegrationTest {
         jdbc.update("DELETE FROM swap WHERE chain_id = ?", chainId);
         jdbc.update("DELETE FROM block_hash WHERE chain_id = ?", chainId);
         jdbc.update("DELETE FROM block_checkpoint WHERE chain_id = ?", chainId);
+        jdbc.update("DELETE FROM outbox_event");
         redis.delete(RedisKeys.reorgCount(chainId));
         redis.delete(RedisKeys.reorgDepth(chainId));
         rpc.reset();
-        publisher.clear();
     }
 
     @Test
@@ -128,7 +120,7 @@ class BlockScannerIntegrationTest {
         ChainBlock fork = new ChainBlock(101L, "0xbbb", "0xother", 12L, List.of());
         assertEquals(ScanStepDTO.Kind.PAUSED, blockScanner.process(chain, fork).kind());
         assertEquals(100L, checkpointMapper.getBlockNumber(chain.chainId()));
-        assertEquals(0, publisher.chains().size());
+        assertEquals(0L, outboxCount(KafkaConstants.REORG));
     }
 
     @Test
@@ -167,7 +159,6 @@ class BlockScannerIntegrationTest {
         swapMapper.saveBatch(List.of(swap(chain.chainId(), 12L, "0xold12", 1, "0x12")));
 
         rpc.put(block(11, "0x11b", "0x10"));
-        publisher.failNext(1);
         ScanStepDTO reorg = blockScanner.process(chain, block(12, "0x12b", "0x11b"));
         assertEquals(ScanStepDTO.Kind.REWOUND, reorg.kind());
         assertEquals(11L, reorg.nextBlock());
@@ -178,12 +169,11 @@ class BlockScannerIntegrationTest {
         assertNull(hash(chain.chainId(), 12L));
         assertEquals("2", redis.opsForValue().get(RedisKeys.reorgDepth(chain.chainId())));
         assertEquals("1", redis.opsForValue().get(RedisKeys.reorgCount(chain.chainId())));
-        ChainEventDTO event = publisher.chains().get(0);
-        assertEquals(KafkaConstants.REORG, event.type());
-        assertEquals(2, event.depth());
-        assertEquals(10L, event.ancestorBlock());
-        assertEquals(11L, event.fromBlock());
-        assertEquals(12L, event.toBlock());
+        assertEquals(1L, outboxCount(KafkaConstants.REORG));
+        assertEquals(2, outboxInt(KafkaConstants.REORG, "depth"));
+        assertEquals(10L, outboxLong(KafkaConstants.REORG, "ancestorBlock"));
+        assertEquals(11L, outboxLong(KafkaConstants.REORG, "fromBlock"));
+        assertEquals(12L, outboxLong(KafkaConstants.REORG, "toBlock"));
 
         assertEquals(ScanStepDTO.Kind.INGESTED, blockScanner.process(chain, block(11, "0x11b", "0x10")).kind());
         assertEquals(ScanStepDTO.Kind.INGESTED, blockScanner.process(chain, block(12, "0x12b", "0x11b")).kind());
@@ -210,10 +200,10 @@ class BlockScannerIntegrationTest {
             parent = hash;
         }
         assertEquals(ConfirmStatusEnum.CONFIRMED.name(), status("0xconfirm"));
-        assertTrue(publisher.chains().stream().anyMatch(event -> KafkaConstants.CONFIRMATION.equals(event.type())
-                && "0xconfirm".equals(event.txHash())
-                && ConfirmStatusEnum.CONFIRMED.name().equals(event.confirmStatus())
-                && Integer.valueOf(chain.confirmationBlocks()).equals(event.confirmations())));
+        assertTrue(outboxCount(KafkaConstants.CONFIRMATION) > 0);
+        assertEquals("0xconfirm", outboxText(KafkaConstants.CONFIRMATION, "txHash"));
+        assertEquals(ConfirmStatusEnum.CONFIRMED.name(), outboxText(KafkaConstants.CONFIRMATION, "confirmStatus"));
+        assertEquals(chain.confirmationBlocks(), outboxInt(KafkaConstants.CONFIRMATION, "confirmations"));
 
         rpc.setFinalized(20L);
         assertEquals(ScanStepDTO.Kind.INGESTED, blockScanner.process(chain, block(30, "0x30", parent)).kind());
@@ -240,6 +230,33 @@ class BlockScannerIntegrationTest {
     private List<Integer> hopLogIndexes(String txHash) {
         return jdbc.queryForList("SELECT h.log_index FROM swap_hop h JOIN swap s ON s.id = h.swap_id WHERE s.tx_hash = ? ORDER BY h.hop_index",
                 Integer.class, txHash);
+    }
+
+    private long outboxCount(String type) {
+        Long count = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM outbox_event WHERE topic = ? AND payload->>'type' = ?",
+                Long.class, KafkaConstants.CHAIN_EVENTS, type);
+        return count == null ? 0L : count;
+    }
+
+    private String outboxText(String type, String field) {
+        return jdbc.queryForObject(
+                "SELECT payload->>? FROM outbox_event WHERE topic = ? AND payload->>'type' = ? ORDER BY id DESC LIMIT 1",
+                String.class, field, KafkaConstants.CHAIN_EVENTS, type);
+    }
+
+    private int outboxInt(String type, String field) {
+        Integer value = jdbc.queryForObject(
+                "SELECT (payload->>?)::int FROM outbox_event WHERE topic = ? AND payload->>'type' = ? ORDER BY id DESC LIMIT 1",
+                Integer.class, field, KafkaConstants.CHAIN_EVENTS, type);
+        return value == null ? 0 : value;
+    }
+
+    private long outboxLong(String type, String field) {
+        Long value = jdbc.queryForObject(
+                "SELECT (payload->>?)::bigint FROM outbox_event WHERE topic = ? AND payload->>'type' = ? ORDER BY id DESC LIMIT 1",
+                Long.class, field, KafkaConstants.CHAIN_EVENTS, type);
+        return value == null ? 0L : value;
     }
 
     private static SwapParser.ParsedHop hop(int hopIndex, String tokenIn, String tokenOut, int logIndex) {
@@ -282,11 +299,6 @@ class BlockScannerIntegrationTest {
         @Primary
         ScriptedRpcGateway scriptedRpcGateway() {
             return new ScriptedRpcGateway();
-        }
-
-        @Bean
-        RecordingPublisher recordingPublisher() {
-            return new RecordingPublisher();
         }
     }
 
@@ -344,47 +356,6 @@ class BlockScannerIntegrationTest {
         @Override
         public java.math.BigInteger estimateGas(long chainId, String from, String to, String data, java.math.BigInteger value) {
             throw new UnsupportedOperationException();
-        }
-    }
-
-    static final class RecordingPublisher implements ChainEventPublishService {
-        private final List<SwapEventDTO> swaps = new CopyOnWriteArrayList<>();
-        private final List<ChainEventDTO> chains = new CopyOnWriteArrayList<>();
-        private final AtomicInteger failures = new AtomicInteger();
-
-        void failNext(int times) {
-            failures.set(times);
-        }
-
-        void clear() {
-            swaps.clear();
-            chains.clear();
-            failures.set(0);
-        }
-
-        List<ChainEventDTO> chains() {
-            return new ArrayList<>(chains);
-        }
-
-        @Override
-        public void publishSwaps(List<SwapEventDTO> events) {
-            guard();
-            swaps.addAll(events);
-        }
-
-        @Override
-        public void publishChain(List<ChainEventDTO> events) {
-            if (events.isEmpty()) {
-                return;
-            }
-            guard();
-            chains.addAll(events);
-        }
-
-        private void guard() {
-            if (failures.getAndUpdate(value -> value > 0 ? value - 1 : 0) > 0) {
-                throw new IllegalStateException("kafka down");
-            }
         }
     }
 }

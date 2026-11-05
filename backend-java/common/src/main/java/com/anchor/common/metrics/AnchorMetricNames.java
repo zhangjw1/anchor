@@ -30,6 +30,9 @@ public final class AnchorMetricNames {
     public static final String KAFKA_CONSUME_FAILURES = "anchor.kafka.consume.failures";
     public static final String KAFKA_DLT_PUBLISHED = "anchor.kafka.dlt.published";
 
+    public static final String OUTBOX_PENDING = "anchor.outbox.pending";
+    public static final String OUTBOX_PUBLISH_FAILURES = "anchor.outbox.publish.failures";
+
     private AnchorMetricNames() {
     }
 }

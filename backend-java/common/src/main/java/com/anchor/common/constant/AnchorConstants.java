@@ -101,6 +101,27 @@ public final class AnchorConstants {
     /** Kafka 单条发送等待确认的超时（秒）。 */
     public static final int KAFKA_SEND_TIMEOUT_SECONDS = 10;
 
+    /** Outbox 每批最多拉取条数。 */
+    public static final int OUTBOX_BATCH_SIZE = 200;
+
+    /** Outbox 单条投递超时（毫秒）。 */
+    public static final long OUTBOX_SEND_TIMEOUT_MS = 2_000L;
+
+    /** Outbox 中继轮询间隔（毫秒）。 */
+    public static final long OUTBOX_RELAY_DELAY_MS = 500L;
+
+    /** Outbox 已发送记录保留天数。 */
+    public static final int OUTBOX_RETENTION_DAYS = 7;
+
+    /** Outbox 失败退避上限（秒）。 */
+    public static final long OUTBOX_MAX_BACKOFF_SECONDS = 60L;
+
+    /** Kafka lag / 链头后台刷新间隔（毫秒）。 */
+    public static final long METRICS_REFRESH_INTERVAL_MS = 3_000L;
+
+    /** Kafka lag 超过该毫秒未成功刷新则视为 stale。 */
+    public static final long KAFKA_LAG_STALE_MS = 15_000L;
+
     /** API 模块消费 Kafka 主题时使用的消费者组 ID。 */
     public static final String KAFKA_GROUP_API = "anchor-api";
 

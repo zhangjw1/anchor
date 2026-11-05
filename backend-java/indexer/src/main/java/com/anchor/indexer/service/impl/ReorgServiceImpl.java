@@ -11,13 +11,14 @@ import com.anchor.common.dto.ChainEventDTO;
 import com.anchor.common.metrics.AnchorMetricNames;
 import com.anchor.indexer.dto.ReorgHandleDTO;
 import com.anchor.indexer.manager.ReorgManager;
-import com.anchor.indexer.service.ChainEventPublishService;
+import com.anchor.indexer.service.OutboxService;
 import com.anchor.indexer.service.ReorgService;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Optional;
@@ -34,19 +35,19 @@ public class ReorgServiceImpl implements ReorgService {
     private final BlockHashMapper blockHashMapper;
     private final CheckpointMapper checkpointMapper;
     private final ReorgManager reorgManager;
-    private final ChainEventPublishService publisher;
+    private final OutboxService outboxService;
     private final StringRedisTemplate redis;
     private final MeterRegistry meterRegistry;
     private final AnchorSettings settings;
 
     public ReorgServiceImpl(RpcGateway rpcGateway, BlockHashMapper blockHashMapper, CheckpointMapper checkpointMapper,
-                            ReorgManager reorgManager, ChainEventPublishService publisher, StringRedisTemplate redis,
+                            ReorgManager reorgManager, OutboxService outboxService, StringRedisTemplate redis,
                             MeterRegistry meterRegistry, AnchorSettings settings) {
         this.rpcGateway = rpcGateway;
         this.blockHashMapper = blockHashMapper;
         this.checkpointMapper = checkpointMapper;
         this.reorgManager = reorgManager;
-        this.publisher = publisher;
+        this.outboxService = outboxService;
         this.redis = redis;
         this.meterRegistry = meterRegistry;
         this.settings = settings;
@@ -57,6 +58,7 @@ public class ReorgServiceImpl implements ReorgService {
      * 由 BlockScanner 检测到父哈希不一致时调用。
      */
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public ReorgHandleDTO handle(ChainDefinition chain, ChainBlock incoming) {
         // 找到新链与旧链的分叉前的最后一个区块（祖先块），如果找不到就要求扫描器暂停
         Optional<ReorgPlan> found = locate(chain.chainId(), incoming);
@@ -69,8 +71,9 @@ public class ReorgServiceImpl implements ReorgService {
         if (changed > 0) {
             recordMetrics(plan);
         }
-        // 通知下游（API/WebSocket）该区间数据已作废，发送失败会一直重试
-        publishUntilAck(plan);
+        // REORG 事件写入 outbox，与回滚同事务；Kafka 故障不阻塞扫块恢复
+        ChainEventDTO event = ChainEventDTO.reorg(plan.chainId(), plan.depth(), plan.ancestorBlock(), plan.fromBlock(), plan.toBlock());
+        outboxService.enqueueChain(List.of(event));
         log.info("重组已处理，chainId={}，祖先块={}，深度={}", plan.chainId(), plan.ancestorBlock(), plan.depth());
         // 告诉扫描器把进度拨回祖先块的下一块，按新链重扫
         return ReorgHandleDTO.rewound(plan.ancestorBlock() + 1);
@@ -133,28 +136,6 @@ public class ReorgServiceImpl implements ReorgService {
         meterRegistry.summary(AnchorMetricNames.CHAIN_REORG_DEPTH, "chainId", chainId).record(plan.depth());
         redis.opsForValue().increment(RedisKeys.reorgCount(plan.chainId()));
         redis.opsForValue().set(RedisKeys.reorgDepth(plan.chainId()), String.valueOf(plan.depth()));
-    }
-
-    private void publishUntilAck(ReorgPlan plan) {
-        ChainEventDTO event = ChainEventDTO.reorg(plan.chainId(), plan.depth(), plan.ancestorBlock(), plan.fromBlock(), plan.toBlock());
-        while (true) {
-            try {
-                publisher.publishChain(List.of(event));
-                return;
-            } catch (RuntimeException ex) {
-                log.error("重组事件发布失败，chainId={}，深度={}", plan.chainId(), plan.depth(), ex);
-                sleep();
-            }
-        }
-    }
-
-    private void sleep() {
-        try {
-            Thread.sleep(settings.getScanner().getPollIntervalMs());
-        } catch (InterruptedException ex) {
-            Thread.currentThread().interrupt();
-            throw new IllegalStateException("reorg publish interrupted", ex);
-        }
     }
 
     /**

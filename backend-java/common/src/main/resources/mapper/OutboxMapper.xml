@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.anchor.common.dao.OutboxMapper">
+
+    <insert id="insertBatch">
+        INSERT INTO outbox_event (topic, msg_key, payload, status, attempts, next_attempt_at, created_by, updated_by)
+        VALUES
+        <foreach collection="list" item="item" separator=",">
+            (#{item.topic}, #{item.msgKey}, #{item.payload}::jsonb, #{item.status}, #{item.attempts},
+             COALESCE(#{item.nextAttemptAt}, NOW()), #{item.createdBy}, #{item.updatedBy})
+        </foreach>
+    </insert>
+
+    <select id="listPending" resultType="com.anchor.common.entity.OutboxEventDO">
+        SELECT id, topic, msg_key AS msgKey, payload::text AS payload, status, attempts,
+               next_attempt_at AS nextAttemptAt, created_by AS createdBy, created_at AS createdAt,
+               updated_by AS updatedBy, updated_at AS updatedAt, sent_at AS sentAt
+        FROM outbox_event
+        WHERE status = 'PENDING' AND next_attempt_at &lt;= #{now}
+        ORDER BY id
+        LIMIT #{limit}
+    </select>
+
+    <update id="markSent">
+        UPDATE outbox_event
+        SET status = 'SENT',
+            sent_at = #{sentAt},
+            updated_by = #{actor},
+            updated_at = NOW()
+        WHERE id = #{id} AND status = 'PENDING'
+    </update>
+
+    <update id="markFailed">
+        UPDATE outbox_event
+        SET attempts = #{attempts},
+            next_attempt_at = #{nextAttemptAt},
+            updated_by = #{actor},
+            updated_at = NOW()
+        WHERE id = #{id} AND status = 'PENDING'
+    </update>
+
+    <select id="countPending" resultType="long">
+        SELECT COUNT(*) FROM outbox_event WHERE status = 'PENDING'
+    </select>
+
+    <delete id="deleteSentBefore">
+        DELETE FROM outbox_event WHERE status = 'SENT' AND sent_at &lt; #{before}
+    </delete>
+</mapper>

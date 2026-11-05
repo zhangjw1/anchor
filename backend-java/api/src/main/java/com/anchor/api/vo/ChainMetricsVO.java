@@ -11,6 +11,8 @@ public record ChainMetricsVO(
         double rpcQps,
         double rpcErrorRate,
         Long kafkaLag,
+        boolean kafkaStale,
+        long outboxPending,
         long reorgCount,
         long reorgDepth) {
 }

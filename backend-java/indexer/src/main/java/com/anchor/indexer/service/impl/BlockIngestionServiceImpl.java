@@ -13,8 +13,10 @@ import com.anchor.common.entity.SwapDO;
 import com.anchor.common.entity.SwapHopDO;
 import com.anchor.common.domain.ConfirmStatusEnum;
 import com.anchor.common.dto.ChainEventDTO;
+import com.anchor.common.dto.SwapEventDTO;
 import com.anchor.indexer.service.BlockIngestionService;
 import com.anchor.indexer.service.ConfirmationService;
+import com.anchor.indexer.service.OutboxService;
 import com.anchor.indexer.dto.BlockIngestDTO;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,16 +37,19 @@ public class BlockIngestionServiceImpl implements BlockIngestionService {
     private final SwapMapper swapMapper;
     private final SwapHopMapper swapHopMapper;
     private final ConfirmationService confirmationService;
+    private final OutboxService outboxService;
     private final AnchorSettings settings;
 
     public BlockIngestionServiceImpl(BlockHashMapper blockHashMapper, CheckpointMapper checkpointMapper,
                                      SwapMapper swapMapper, SwapHopMapper swapHopMapper,
-                                     ConfirmationService confirmationService, AnchorSettings settings) {
+                                     ConfirmationService confirmationService, OutboxService outboxService,
+                                     AnchorSettings settings) {
         this.blockHashMapper = blockHashMapper;
         this.checkpointMapper = checkpointMapper;
         this.swapMapper = swapMapper;
         this.swapHopMapper = swapHopMapper;
         this.confirmationService = confirmationService;
+        this.outboxService = outboxService;
         this.settings = settings;
     }
 
@@ -55,6 +60,10 @@ public class BlockIngestionServiceImpl implements BlockIngestionService {
         pruneHashes(chain.chainId(), block.number(), finalizedBlock);
         writeSwaps(chain.chainId(), swaps);
         List<ChainEventDTO> confirmations = confirmationService.apply(chain, block.number(), finalizedBlock);
+        List<SwapEventDTO> swapEvents = swaps.stream().map(SwapEventDTO::from).toList();
+        outboxService.enqueueSwaps(swapEvents);
+        outboxService.enqueueChain(confirmations);
+        checkpointMapper.advance(chain.chainId(), block.number(), block.hash(), AnchorConstants.ACTOR_INDEXER);
         return new BlockIngestDTO(swaps, confirmations);
     }
 
@@ -68,11 +77,6 @@ public class BlockIngestionServiceImpl implements BlockIngestionService {
         if (minKeep > 0) {
             blockHashMapper.deleteOlder(chainId, minKeep);
         }
-    }
-
-    @Override
-    public void advanceCheckpoint(long chainId, long blockNumber, String blockHash) {
-        checkpointMapper.advance(chainId, blockNumber, blockHash, AnchorConstants.ACTOR_INDEXER);
     }
 
     private void writeSwaps(long chainId, List<SwapParser.ParsedSwap> swaps) {

@@ -8,6 +8,8 @@ export interface ChainMetrics {
   rpcQps: number;
   rpcErrorRate: number;
   kafkaLag: number | null;
+  kafkaStale: boolean;
+  outboxPending: number;
   reorgCount: number;
   reorgDepth: number;
   connected: boolean;
@@ -20,6 +22,8 @@ const EMPTY: ChainMetrics = {
   rpcQps: 0,
   rpcErrorRate: 0,
   kafkaLag: null,
+  kafkaStale: true,
+  outboxPending: 0,
   reorgCount: 0,
   reorgDepth: 0,
   connected: false,
@@ -45,6 +49,8 @@ function fromPayload(payload: Record<string, unknown>, connected: boolean): Chai
     rpcQps: num(payload.rpcQps),
     rpcErrorRate: num(payload.rpcErrorRate),
     kafkaLag: payload.kafkaLag == null ? null : num(payload.kafkaLag),
+    kafkaStale: Boolean(payload.kafkaStale),
+    outboxPending: num(payload.outboxPending),
     reorgCount: num(payload.reorgCount),
     reorgDepth: num(payload.reorgDepth),
     connected,

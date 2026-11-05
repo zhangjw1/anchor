@@ -114,6 +114,8 @@ export interface ChainMetricsDto {
   rpcQps: number;
   rpcErrorRate: number;
   kafkaLag: number | null;
+  kafkaStale?: boolean;
+  outboxPending?: number;
   reorgCount: number;
   reorgDepth: number;
 }

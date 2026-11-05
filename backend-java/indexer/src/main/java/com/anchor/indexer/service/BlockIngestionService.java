@@ -12,12 +12,7 @@ import java.util.List;
  */
 public interface BlockIngestionService {
     /**
-     * 保存区块哈希和交换，并返回待发布的事件。检查点由调用方在发布成功后推进。
+     * 同一事务：写区块/交换、写 outbox、推进 checkpoint。Kafka 由 OutboxRelay 异步投递。
      */
-
     BlockIngestDTO persist(ChainDefinition chain, ChainBlock block, List<SwapParser.ParsedSwap> swaps, long finalizedBlock);
-    /**
-     * 把扫描进度推进到这个高度。
-     */
-    void advanceCheckpoint(long chainId, long blockNumber, String blockHash);
 }

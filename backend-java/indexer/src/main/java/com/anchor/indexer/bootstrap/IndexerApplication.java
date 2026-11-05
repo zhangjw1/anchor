@@ -2,12 +2,14 @@ package com.anchor.indexer.bootstrap;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 import java.util.Map;
 
 /**
  * 索引进程入口。默认打开扫描器，测试仍可用配置关掉。
  */
+@EnableScheduling
 @SpringBootApplication(scanBasePackages = {"com.anchor.indexer", "com.anchor.parser.swap", "com.anchor.parser.service"})
 public class IndexerApplication {
 

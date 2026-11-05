@@ -14,10 +14,8 @@ import com.anchor.common.constant.RedisKeys;
 import com.anchor.common.dao.BlockHashMapper;
 import com.anchor.common.dao.CheckpointMapper;
 import com.anchor.common.domain.AnchorException;
-import com.anchor.common.dto.SwapEventDTO;
 import com.anchor.common.metrics.AnchorMetricNames;
 import com.anchor.indexer.service.BlockIngestionService;
-import com.anchor.indexer.service.ChainEventPublishService;
 import com.anchor.indexer.dto.BlockIngestDTO;
 import com.anchor.indexer.dto.ReorgHandleDTO;
 import com.anchor.indexer.dto.ScanStepDTO;
@@ -61,7 +59,6 @@ public class BlockScanner implements ChainScanner {
     private final StringRedisTemplate redis;
     private final TokenMetadataService tokenMetadataService;
     private final ReorgService reorgService;
-    private final ChainEventPublishService publisher;
     private final MeterRegistry meterRegistry;
     private final ScannerLease scannerLease;
     private final AtomicBoolean paused = new AtomicBoolean(false);
@@ -70,7 +67,7 @@ public class BlockScanner implements ChainScanner {
     public BlockScanner(AnchorSettings settings, ChainRegistry chainRegistry, RpcGateway rpcGateway, SwapParser swapParser,
                         BlockIngestionService ingestionService, CheckpointMapper checkpointMapper, BlockHashMapper blockHashMapper,
                         StringRedisTemplate redis, TokenMetadataService tokenMetadataService, ReorgService reorgService,
-                        ChainEventPublishService publisher, MeterRegistry meterRegistry, ScannerLease scannerLease) {
+                        MeterRegistry meterRegistry, ScannerLease scannerLease) {
         this.settings = settings;
         this.chainRegistry = chainRegistry;
         this.rpcGateway = rpcGateway;
@@ -81,7 +78,6 @@ public class BlockScanner implements ChainScanner {
         this.redis = redis;
         this.tokenMetadataService = tokenMetadataService;
         this.reorgService = reorgService;
-        this.publisher = publisher;
         this.meterRegistry = meterRegistry;
         this.scannerLease = scannerLease;
     }
@@ -200,18 +196,15 @@ public class BlockScanner implements ChainScanner {
             }
             // 获取执行层/共识层 确认的最新区块高度(这个高度之前的区块永远不会再被重组)
             long finalized = rpcGateway.finalizedBlockNumber(chain.chainId());
-            // 将区块数据和swap交易数据入库
+            // 入库 + outbox + checkpoint 同事务；Kafka 由 OutboxRelay 异步投递
             BlockIngestDTO ingested = ingestionService.persist(chain, block, swaps, finalized);
-            // 区块里找到的交易信息通过kafka推送前端
-            publisher.publishSwaps(ingested.swaps().stream().map(SwapEventDTO::from).toList());
-            publisher.publishChain(ingested.confirmations());
-            ingestionService.advanceCheckpoint(chain.chainId(), block.number(), block.hash());
             String chainTag = String.valueOf(chain.chainId());
             meterRegistry.counter(AnchorMetricNames.INDEXER_BLOCKS, "chainId", chainTag).increment();
             if (!swaps.isEmpty()) {
                 meterRegistry.counter(AnchorMetricNames.INDEXER_SWAPS, "chainId", chainTag).increment(swaps.size());
             }
-            log.info("区块已入库，chainId={}，区块={}，交换数={}", chain.chainId(), block.number(), swaps.size());
+            log.info("区块已入库，chainId={}，区块={}，交换数={}，确认事件={}",
+                    chain.chainId(), block.number(), swaps.size(), ingested.confirmations().size());
             return ScanStepDTO.ingested(block.number() + 1);
         } finally {
             MDC.remove("chainId");

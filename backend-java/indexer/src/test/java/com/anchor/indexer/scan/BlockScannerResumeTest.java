@@ -13,7 +13,6 @@ import com.anchor.common.domain.ChainTypeEnum;
 import com.anchor.common.domain.GasModelEnum;
 import com.anchor.common.domain.SignModeEnum;
 import com.anchor.indexer.service.BlockIngestionService;
-import com.anchor.indexer.service.ChainEventPublishService;
 import com.anchor.indexer.service.ReorgService;
 import com.anchor.parser.service.TokenMetadataService;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -45,7 +44,7 @@ class BlockScannerResumeTest {
         scanner = new BlockScanner(settings, registry, mock(RpcGateway.class), mock(SwapParser.class),
                 mock(BlockIngestionService.class), mock(CheckpointMapper.class), mock(BlockHashMapper.class),
                 mock(StringRedisTemplate.class), mock(TokenMetadataService.class), mock(ReorgService.class),
-                mock(ChainEventPublishService.class), new SimpleMeterRegistry(), mock(ScannerLease.class));
+                new SimpleMeterRegistry(), mock(ScannerLease.class));
         scanner.registerPausedGauge();
     }
 

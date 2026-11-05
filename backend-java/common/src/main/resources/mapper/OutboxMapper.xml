@@ -11,7 +11,7 @@
         </foreach>
     </insert>
 
-    <select id="listPending" resultType="com.anchor.common.entity.OutboxEventDO">
+    <select id="claimPending" resultType="com.anchor.common.entity.OutboxEventDO">
         SELECT id, topic, msg_key AS msgKey, payload::text AS payload, status, attempts,
                next_attempt_at AS nextAttemptAt, created_by AS createdBy, created_at AS createdAt,
                updated_by AS updatedBy, updated_at AS updatedAt, sent_at AS sentAt
@@ -19,6 +19,7 @@
         WHERE status = 'PENDING' AND next_attempt_at &lt;= #{now}
         ORDER BY id
         LIMIT #{limit}
+        FOR UPDATE SKIP LOCKED
     </select>
 
     <update id="markSent">

@@ -7,7 +7,6 @@ import com.anchor.common.chain.ChainRegistry;
 import com.anchor.common.chain.RpcGateway;
 import com.anchor.common.chain.SwapParser;
 import com.anchor.common.constant.AnchorConstants;
-import com.anchor.common.constant.KafkaConstants;
 import com.anchor.common.constant.RedisKeys;
 import com.anchor.common.dao.CheckpointMapper;
 import com.anchor.common.dao.SwapMapper;
@@ -42,7 +41,6 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @SpringBootTest(classes = IndexerApplication.class, properties = {
         "anchor.scanner.enabled=false",
@@ -120,7 +118,8 @@ class BlockScannerIntegrationTest {
         ChainBlock fork = new ChainBlock(101L, "0xbbb", "0xother", 12L, List.of());
         assertEquals(ScanStepDTO.Kind.PAUSED, blockScanner.process(chain, fork).kind());
         assertEquals(100L, checkpointMapper.getBlockNumber(chain.chainId()));
-        assertEquals(0L, outboxCount(KafkaConstants.REORG));
+        // kafka.enabled=false 时不写 outbox
+        assertEquals(0L, outboxTotal());
     }
 
     @Test
@@ -169,11 +168,7 @@ class BlockScannerIntegrationTest {
         assertNull(hash(chain.chainId(), 12L));
         assertEquals("2", redis.opsForValue().get(RedisKeys.reorgDepth(chain.chainId())));
         assertEquals("1", redis.opsForValue().get(RedisKeys.reorgCount(chain.chainId())));
-        assertEquals(1L, outboxCount(KafkaConstants.REORG));
-        assertEquals(2, outboxInt(KafkaConstants.REORG, "depth"));
-        assertEquals(10L, outboxLong(KafkaConstants.REORG, "ancestorBlock"));
-        assertEquals(11L, outboxLong(KafkaConstants.REORG, "fromBlock"));
-        assertEquals(12L, outboxLong(KafkaConstants.REORG, "toBlock"));
+        assertEquals(0L, outboxTotal());
 
         assertEquals(ScanStepDTO.Kind.INGESTED, blockScanner.process(chain, block(11, "0x11b", "0x10")).kind());
         assertEquals(ScanStepDTO.Kind.INGESTED, blockScanner.process(chain, block(12, "0x12b", "0x11b")).kind());
@@ -200,10 +195,7 @@ class BlockScannerIntegrationTest {
             parent = hash;
         }
         assertEquals(ConfirmStatusEnum.CONFIRMED.name(), status("0xconfirm"));
-        assertTrue(outboxCount(KafkaConstants.CONFIRMATION) > 0);
-        assertEquals("0xconfirm", outboxText(KafkaConstants.CONFIRMATION, "txHash"));
-        assertEquals(ConfirmStatusEnum.CONFIRMED.name(), outboxText(KafkaConstants.CONFIRMATION, "confirmStatus"));
-        assertEquals(chain.confirmationBlocks(), outboxInt(KafkaConstants.CONFIRMATION, "confirmations"));
+        assertEquals(0L, outboxTotal());
 
         rpc.setFinalized(20L);
         assertEquals(ScanStepDTO.Kind.INGESTED, blockScanner.process(chain, block(30, "0x30", parent)).kind());
@@ -232,31 +224,9 @@ class BlockScannerIntegrationTest {
                 Integer.class, txHash);
     }
 
-    private long outboxCount(String type) {
-        Long count = jdbc.queryForObject(
-                "SELECT COUNT(*) FROM outbox_event WHERE topic = ? AND payload->>'type' = ?",
-                Long.class, KafkaConstants.CHAIN_EVENTS, type);
+    private long outboxTotal() {
+        Long count = jdbc.queryForObject("SELECT COUNT(*) FROM outbox_event", Long.class);
         return count == null ? 0L : count;
-    }
-
-    private String outboxText(String type, String field) {
-        return jdbc.queryForObject(
-                "SELECT payload->>? FROM outbox_event WHERE topic = ? AND payload->>'type' = ? ORDER BY id DESC LIMIT 1",
-                String.class, field, KafkaConstants.CHAIN_EVENTS, type);
-    }
-
-    private int outboxInt(String type, String field) {
-        Integer value = jdbc.queryForObject(
-                "SELECT (payload->>?)::int FROM outbox_event WHERE topic = ? AND payload->>'type' = ? ORDER BY id DESC LIMIT 1",
-                Integer.class, field, KafkaConstants.CHAIN_EVENTS, type);
-        return value == null ? 0 : value;
-    }
-
-    private long outboxLong(String type, String field) {
-        Long value = jdbc.queryForObject(
-                "SELECT (payload->>?)::bigint FROM outbox_event WHERE topic = ? AND payload->>'type' = ? ORDER BY id DESC LIMIT 1",
-                Long.class, field, KafkaConstants.CHAIN_EVENTS, type);
-        return value == null ? 0L : value;
     }
 
     private static SwapParser.ParsedHop hop(int hopIndex, String tokenIn, String tokenOut, int logIndex) {

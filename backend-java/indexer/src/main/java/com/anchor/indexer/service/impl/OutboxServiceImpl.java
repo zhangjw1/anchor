@@ -10,23 +10,27 @@ import com.anchor.common.entity.OutboxEventDO;
 import com.anchor.indexer.service.OutboxService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 序列化事件并批量插入 outbox_event。
+ * 序列化事件并批量插入 outbox_event；Kafka 未启用时不入队。
  */
 @Service
 public class OutboxServiceImpl implements OutboxService {
 
     private final OutboxMapper outboxMapper;
     private final ObjectMapper objectMapper;
+    private final boolean kafkaEnabled;
 
-    public OutboxServiceImpl(OutboxMapper outboxMapper, ObjectMapper objectMapper) {
+    public OutboxServiceImpl(OutboxMapper outboxMapper, ObjectMapper objectMapper,
+                             @Value("${anchor.kafka.enabled:true}") boolean kafkaEnabled) {
         this.outboxMapper = outboxMapper;
         this.objectMapper = objectMapper;
+        this.kafkaEnabled = kafkaEnabled;
     }
 
     @Override
@@ -40,7 +44,7 @@ public class OutboxServiceImpl implements OutboxService {
     }
 
     private void enqueue(String topic, List<?> events) {
-        if (events == null || events.isEmpty()) {
+        if (!kafkaEnabled || events == null || events.isEmpty()) {
             return;
         }
         List<OutboxEventDO> rows = new ArrayList<>(events.size());

@@ -15,7 +15,10 @@ public interface OutboxMapper {
 
     int insertBatch(@Param("list") List<OutboxEventDO> list);
 
-    List<OutboxEventDO> listPending(@Param("limit") int limit, @Param("now") OffsetDateTime now);
+    /**
+     * 领取待发送行并加行锁，多实例下互不抢同一批（FOR UPDATE SKIP LOCKED）。
+     */
+    List<OutboxEventDO> claimPending(@Param("limit") int limit, @Param("now") OffsetDateTime now);
 
     int markSent(@Param("id") long id, @Param("actor") String actor, @Param("sentAt") OffsetDateTime sentAt);
 

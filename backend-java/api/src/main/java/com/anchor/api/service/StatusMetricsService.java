@@ -54,6 +54,7 @@ public class StatusMetricsService {
     private final MeterRegistry meterRegistry;
     private final ObjectProvider<KafkaAdmin> kafkaAdmin;
     private final Map<Long, RateSample> rpcSamples = new ConcurrentHashMap<>();
+    private final Map<Long, RateSnapshot> rpcRateCache = new ConcurrentHashMap<>();
     private final Map<Long, AtomicLong> headCache = new ConcurrentHashMap<>();
     private final AtomicLong lastKafkaLag = new AtomicLong(-1L);
     private final AtomicLong lastKafkaSuccessAtMs = new AtomicLong(0L);
@@ -128,7 +129,7 @@ public class StatusMetricsService {
             head = processed;
         }
         long lag = Math.max(0L, head - processed);
-        RateSnapshot rpc = rpcRate(chainId);
+        RateSnapshot rpc = rpcRateCache.getOrDefault(chainId, RateSnapshot.ZERO);
         long kafkaLagValue = lastKafkaLag.get();
         boolean stale = isKafkaStale();
         return new ChainMetricsVO(
@@ -149,6 +150,7 @@ public class StatusMetricsService {
         try {
             for (ChainDefinition chain : chainRegistry.all()) {
                 refreshHead(chain.chainId());
+                refreshRpcRate(chain.chainId());
             }
             refreshKafkaLag();
             refreshOutboxPending();
@@ -164,6 +166,10 @@ public class StatusMetricsService {
         } catch (RuntimeException ex) {
             log.debug("refresh head failed chainId={}", chainId);
         }
+    }
+
+    private void refreshRpcRate(long chainId) {
+        rpcRateCache.put(chainId, computeRpcRate(chainId));
     }
 
     private void refreshOutboxPending() {
@@ -273,19 +279,18 @@ public class StatusMetricsService {
         return stored == null ? 0L : stored;
     }
 
-    private RateSnapshot rpcRate(long chainId) {
+    private RateSnapshot computeRpcRate(long chainId) {
         String tag = String.valueOf(chainId);
         double requests = sumCounter(AnchorMetricNames.RPC_REQUESTS, "chainId", tag);
         double errors = sumCounter(AnchorMetricNames.RPC_ERRORS, "chainId", tag);
         long now = System.currentTimeMillis();
-        RateSample previous = rpcSamples.get(chainId);
-        rpcSamples.put(chainId, new RateSample(requests, errors, now));
+        RateSample previous = rpcSamples.put(chainId, new RateSample(requests, errors, now));
         if (previous == null || now <= previous.atMs()) {
-            return new RateSnapshot(0.0, 0.0);
+            return RateSnapshot.ZERO;
         }
         double elapsedSec = (now - previous.atMs()) / 1000.0;
         if (elapsedSec <= 0) {
-            return new RateSnapshot(0.0, 0.0);
+            return RateSnapshot.ZERO;
         }
         double deltaReq = Math.max(0.0, requests - previous.requests());
         double deltaErr = Math.max(0.0, errors - previous.errors());
@@ -322,5 +327,6 @@ public class StatusMetricsService {
     }
 
     private record RateSnapshot(double qps, double errorRate) {
+        static final RateSnapshot ZERO = new RateSnapshot(0.0, 0.0);
     }
 }

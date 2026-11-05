@@ -61,6 +61,10 @@ public class AnchorSettings {
         private boolean enabled;
         // 轮询间隔，单位毫秒
         private long pollIntervalMs = 2000L;
+        /** 落后超过该块数时，从 head - N 起扫并跳过中间区间；0 表示不跳。 */
+        private int maxCatchupBlocks = 2000;
+        /** 追块时一次并发 getBlock 的数量（监控匹配依赖 tx.from，不适合用 eth_getLogs 替代）。 */
+        private int catchupBatchSize = 50;
 
         public boolean isEnabled() {
             return enabled;
@@ -76,6 +80,22 @@ public class AnchorSettings {
 
         public void setPollIntervalMs(long pollIntervalMs) {
             this.pollIntervalMs = pollIntervalMs;
+        }
+
+        public int getMaxCatchupBlocks() {
+            return maxCatchupBlocks;
+        }
+
+        public void setMaxCatchupBlocks(int maxCatchupBlocks) {
+            this.maxCatchupBlocks = maxCatchupBlocks;
+        }
+
+        public int getCatchupBatchSize() {
+            return catchupBatchSize;
+        }
+
+        public void setCatchupBatchSize(int catchupBatchSize) {
+            this.catchupBatchSize = catchupBatchSize;
         }
     }
 

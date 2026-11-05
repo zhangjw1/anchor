@@ -9,7 +9,6 @@ import com.anchor.common.chain.ChainScanner;
 import com.anchor.common.chain.ChainTransaction;
 import com.anchor.common.chain.RpcGateway;
 import com.anchor.common.chain.SwapParser;
-import com.anchor.common.constant.AnchorConstants;
 import com.anchor.common.constant.RedisKeys;
 import com.anchor.common.dao.BlockHashMapper;
 import com.anchor.common.dao.CheckpointMapper;
@@ -123,7 +122,12 @@ public class BlockScanner implements ChainScanner {
                         sleep(settings.getScanner().getPollIntervalMs());
                         continue;
                     }
-                    int count = (int) Math.min(AnchorConstants.CATCH_UP_CONCURRENCY, head - next + 1);
+                    next = applyMaxCatchup(chain.chainId(), next, head);
+                    if (next > head) {
+                        continue;
+                    }
+                    int batch = Math.max(1, settings.getScanner().getCatchupBatchSize());
+                    int count = (int) Math.min(batch, head - next + 1);
                     for (ChainBlock block : fetchRange(chain.chainId(), next, count)) {
                         if (paused.get() || !scannerLease.isHeldBySelf(chain.chainId())) {
                             break;
@@ -255,6 +259,28 @@ public class BlockScanner implements ChainScanner {
             }
         }
         return swaps;
+    }
+
+    /**
+     * 落后超过 max-catchup-blocks 时，从 head - N 起扫并 WARN 跳过区间。
+     * 注：监控按 tx.from 匹配，仍须逐块 getBlock 做父哈希校验；eth_getLogs 不能替代。
+     */
+    long applyMaxCatchup(long chainId, long next, long head) {
+        int maxCatchup = settings.getScanner().getMaxCatchupBlocks();
+        if (maxCatchup <= 0 || next > head) {
+            return next;
+        }
+        long lag = head - next + 1;
+        if (lag <= maxCatchup) {
+            return next;
+        }
+        long jumpTo = Math.max(0L, head - maxCatchup);
+        if (jumpTo <= next) {
+            return next;
+        }
+        log.warn("Catch-up lag too large, skipping blocks [{}, {}) chainId={} head={} maxCatchup={}",
+                next, jumpTo, chainId, head, maxCatchup);
+        return jumpTo;
     }
 
     private List<ChainBlock> fetchRange(long chainId, long start, int count) {

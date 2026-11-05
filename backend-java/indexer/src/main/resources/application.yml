@@ -8,3 +8,5 @@ server:
 anchor:
   scanner:
     enabled: true
+    max-catchup-blocks: 2000
+    catchup-batch-size: 50

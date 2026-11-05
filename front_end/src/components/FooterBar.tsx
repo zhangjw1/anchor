@@ -18,10 +18,12 @@ export function FooterBar({ metrics, mock }: FooterBarProps) {
     );
   }
 
-  const kafkaBroken = metrics.kafkaLag == null || metrics.kafkaStale;
-  const kafkaLabel = kafkaBroken
-    ? 'Kafka 异常'
-    : `Kafka lag ${metrics.kafkaLag}`;
+  const kafkaBroken = metrics.connected && (metrics.kafkaLag == null || metrics.kafkaStale);
+  const kafkaLabel = !metrics.connected
+    ? '—'
+    : kafkaBroken
+      ? 'Kafka 异常'
+      : `Kafka lag ${metrics.kafkaLag}`;
 
   return (
     <footer className="h-9 bg-white border-t border-slate-200 px-4 flex items-center gap-4 text-[11px] text-slate-500 shrink-0 select-none overflow-x-auto font-mono">

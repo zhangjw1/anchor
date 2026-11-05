@@ -53,8 +53,17 @@ public final class AnchorConstants {
     /** RPC 失败后重试前的退避等待（毫秒）。 */
     public static final long RPC_BACKOFF_MILLIS = 200L;
 
-    /** 追块时一次并发拉取的最大区块数（虚拟线程并行 getBlock）。 */
-    public static final int CATCH_UP_CONCURRENCY = 4;
+    /** 追块并发 getBlock 默认值；可被 anchor.scanner.catchup-batch-size 覆盖。 */
+    public static final int CATCH_UP_CONCURRENCY = 50;
+
+    /** 落后块数超过该阈值时从 head - N 起扫；可被 anchor.scanner.max-catchup-blocks 覆盖。 */
+    public static final int MAX_CATCHUP_BLOCKS = 2000;
+
+    /** Kafka 消费端短 TTL 去重窗口（秒）。 */
+    public static final int EVENT_DEDUPE_TTL_SECONDS = 120;
+
+    /** Kafka 消费端去重缓存最大条目。 */
+    public static final int EVENT_DEDUPE_MAX_SIZE = 50_000;
 
     /** 扫块 Redis 选主锁 TTL（秒）；持有者需在过期前续约。 */
     public static final long SCANNER_LOCK_TTL_SECONDS = 15L;

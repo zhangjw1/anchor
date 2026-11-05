@@ -22,7 +22,7 @@ const EMPTY: ChainMetrics = {
   rpcQps: 0,
   rpcErrorRate: 0,
   kafkaLag: null,
-  kafkaStale: true,
+  kafkaStale: false,
   outboxPending: 0,
   reorgCount: 0,
   reorgDepth: 0,
